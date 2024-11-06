@@ -1,3 +1,8 @@
+// Battery Management System --------------------------------------------------------------------------------------------------
+// 
+// Author: Cole Barach
+// Date Created: 2024.11.05
+
 // Includes -------------------------------------------------------------------------------------------------------------------
 
 // Includes
@@ -16,7 +21,7 @@ int main (void)
 	chSysInit ();
 
 	// Debug Initialization
-	debugInit ("STMF405 Stub Project");
+	debugInit ("Battery Management Board, Revision AA");
 
 	// Do nothing.
 	while (true)
@@ -25,5 +30,6 @@ int main (void)
 
 void faultCallback (void)
 {
+	// TODO(Barach):
 	// Fault handler implementation
 }

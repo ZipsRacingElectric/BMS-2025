@@ -10,6 +10,9 @@ BUILDDIR := ./build
 DEPDIR   := ./build/dep
 BOARDDIR := ./build/board
 
+# Includes
+ALLINC += src
+
 # Source files
 CSRC =	$(ALLCSRC)		\
 		src/main.c		\
@@ -19,7 +22,7 @@ CSRC =	$(ALLCSRC)		\
 include common/src/fault_handler.mk
 
 # Compiler flags
-USE_OPT = -O0 
+USE_OPT = -Og -Wall -Wextra
 
 # C macro definitions
 UDEFS =

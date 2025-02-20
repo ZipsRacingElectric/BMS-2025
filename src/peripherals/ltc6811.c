@@ -3,31 +3,31 @@
 
 // Constants / Macros ---------------------------------------------------------------------------------------------------------
 
-#define T_READY_MAX			TIME_US2I (10)
-#define T_WAKE_MAX			TIME_US2I (400)
+#define T_READY_MAX						TIME_US2I (10)
+#define T_WAKE_MAX						TIME_US2I (400)
 
-#define COMMAND_WRCFGA		0b00000000001
-#define COMMAND_RDCFGA		0b00000000010
+#define COMMAND_WRCFGA					0b00000000001
+#define COMMAND_RDCFGA					0b00000000010
 
-#define COMMAND_RDCVA		0b00000000100
-#define COMMAND_RDCVB		0b00000000110
-#define COMMAND_RDCVC		0b00000001000
-#define COMMAND_RDCVD		0b00000001010
+#define COMMAND_RDCVA					0b00000000100
+#define COMMAND_RDCVB					0b00000000110
+#define COMMAND_RDCVC					0b00000001000
+#define COMMAND_RDCVD					0b00000001010
 
-#define COMMAND_RDAUXA		0b00000001100
-#define COMMAND_RDAUXB		0b00000001110
+#define COMMAND_RDAUXA					0b00000001100
+#define COMMAND_RDAUXB					0b00000001110
 
-#define COMMAND_RDSTATA		0b00000010000
-#define COMMAND_RDSTATB		0b00000010010
+#define COMMAND_RDSTATA					0b00000010000
+#define COMMAND_RDSTATB					0b00000010010
 
-#define COMMAND_WRSCTRL		0b00000010100
-#define COMMAND_RDSCTRL		0b00000010110
+#define COMMAND_WRSCTRL					0b00000010100
+#define COMMAND_RDSCTRL					0b00000010110
 
-#define COMMAND_WRPWM		0b00000100000
-#define COMMAND_RDPWM		0b00000100010
+#define COMMAND_WRPWM					0b00000100000
+#define COMMAND_RDPWM					0b00000100010
 
-#define COMMAND_STSCTRL		0b00000011001
-#define COMMAND_CLRSCTRL	0b00000011000
+#define COMMAND_STSCTRL					0b00000011001
+#define COMMAND_CLRSCTRL				0b00000011000
 
 #define COMMAND_ADCV(ch, md, dcp)		(0b01001100000 | ((md) << 7) | ((dcp) << 4) | (ch))
 #define COMMAND_ADOW(ch, md, dcp, pup)	(0b01000101000 | ((md) << 7) | ((dcp) << 4) | (ch) | ((pup) << 6))
@@ -182,7 +182,7 @@ void wakeupDaisyChain (ltc6811DaisyChain_t* chain)
 	for (uint16_t index = 0; index < chain->deviceCount; ++index)
 	{
 		// Drive CS low for the maximum wakeup time (guarantees this device will wake).
-		spiStart (chain->driver, chain->config);
+		spiStart (chain->driver, &chain->config);
 		chThdSleep (T_WAKE_MAX);
 
 		// Release CS and allow the device to enter the ready state.
@@ -289,4 +289,30 @@ bool readRegisterGroups (ltc6811DaisyChain_t* chain, uint16_t command)
 	}
 
 	return true;
+}
+
+void ltc6811ChainWriteTest (ltc6811DaisyChain_t* chain)
+{
+	// Write a pattern to a place where it won't cause any damage.
+	for (uint16_t index = 0; index < chain->deviceCount; ++index)
+	{
+		chain->devices [index].tx [0] = 0x00;
+		chain->devices [index].tx [1] = index; // VUV
+		chain->devices [index].tx [2] = chain->deviceCount - index - 1; // VUV / VOV
+		chain->devices [index].tx [3] = 0x00;
+		chain->devices [index].tx [4] = 0x00;
+		chain->devices [index].tx [5] = 0x00;
+	}
+
+	volatile bool result = writeRegisterGroups (chain, COMMAND_WRCFGA);
+	result = result;
+	__BKPT ();
+}
+
+void ltc6811ChainReadTest (ltc6811DaisyChain_t* chain)
+{
+	// Read the data back and check what it reads.
+	volatile bool result = readRegisterGroups (chain, COMMAND_RDCFGA);
+	result = result;
+	__BKPT ();
 }

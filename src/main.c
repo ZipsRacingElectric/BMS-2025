@@ -9,10 +9,18 @@
 
 // Includes
 #include "debug.h"
+#include "peripherals.h"
 
 // ChibiOS
-#include "ch.h"
 #include "hal.h"
+
+// Interrupts -----------------------------------------------------------------------------------------------------------------
+
+void hardFaultCallback (void)
+{
+	// TODO(Barach):
+	// Fault handler implementation
+}
 
 // Entrypoint -----------------------------------------------------------------------------------------------------------------
 
@@ -23,17 +31,24 @@ int main (void)
 	chSysInit ();
 
 	// Debug Initialization
-	debugInit ("Battery Management Board, Revision AA");
+	ioline_t ledLine = LINE_LED_HEARTBEAT;
+	debugHeartbeatStart (&ledLine, LOWPRIO);
+
+	// Peripheral Initialization
+	if (!peripheralsInit ())
+	{
+		hardFaultCallback ();
+		while (true);
+	}
+
+	// Test read, should be default values
+	ltc6811ChainReadTest (&senseBoards);
+	// Test write, should succeed
+	ltc6811ChainWriteTest (&senseBoards);
+	// Test read, should read written values
+	ltc6811ChainReadTest (&senseBoards);
 
 	// Do nothing.
 	while (true)
 		chThdSleepMilliseconds (500);
-}
-
-// Interrupts -----------------------------------------------------------------------------------------------------------------
-
-void hardFaultCallback (void)
-{
-	// TODO(Barach):
-	// Fault handler implementation
 }

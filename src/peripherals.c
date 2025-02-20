@@ -3,8 +3,36 @@
 
 // Global Peripherals ---------------------------------------------------------------------------------------------------------
 
-mc24lc32_t eeprom;
-// eepromMap_t* eepromMap;
+mc24lc32_t			eeprom;
+eepromMap_t*		eepromMap;
+
+#define LTC_COUNT 12
+ltc6811_t ltcs [LTC_COUNT] =
+{
+	{
+		.state = LTC6811_STATE_READY
+	}
+};
+
+ltc6811DaisyChain_t	senseBoards =
+{
+	.state			= LTC6811_CHAIN_STATE_READY,
+	.miso			= LINE_SPI1_MISO,
+	.config 		=
+	{
+		.circular	= false,
+		.slave		= false,
+		.cr1		= 0,
+		.cr2		= 0,
+		.data_cb	= NULL,
+		.error_cb	= NULL,
+		.ssport		= PAL_PORT (LINE_CS_ISOSPI),
+		.sspad		= PAL_PAD (LINE_CS_ISOSPI)
+	},
+	.driver			= &SPID1,
+	.devices		= ltcs,
+	.deviceCount	= LTC_COUNT
+};
 
 // Configuration --------------------------------------------------------------------------------------------------------------
 
@@ -27,18 +55,20 @@ static const mc24lc32Config_t EEPROM_CONFIG =
 
 // Functions ------------------------------------------------------------------------------------------------------------------
 
-void peripheralsInit (void)
+bool peripheralsInit (void)
 {
-	// TODO(Barach): Return value
-
 	// I2C 1 driver initialization
-	i2cStart (&I2CD1, &I2C1_CONFIG);
+	if (i2cStart (&I2CD1, &I2C1_CONFIG) != MSG_OK)
+		return false;
 
 	// EEPROM initialization
-	mc24lc32Init (&eeprom, &EEPROM_CONFIG);
+	if (!mc24lc32Init (&eeprom, &EEPROM_CONFIG) && eeprom.state == MC24LC32_STATE_FAILED)
+		return false;
 	eepromMap = (eepromMap_t*) eeprom.cache;
 
+	// Re-configurable peripherals are not considered fatal.
 	peripheralsReconfigure ();
+	return true;
 }
 
 void peripheralsReconfigure (void)

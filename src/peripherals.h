@@ -12,6 +12,7 @@
 
 // Includes
 #include "peripherals/eeprom_map.h"
+#include "peripherals/ltc6811.h"
 #include "peripherals/mc24lc32.h"
 
 // Global Peripherals ---------------------------------------------------------------------------------------------------------
@@ -22,12 +23,16 @@ extern mc24lc32_t eeprom;
 /// @brief Structure mapping the EEPROM's contents to C datatypes.
 extern eepromMap_t* eepromMap;
 
+// TODO(Barach): Docs
+extern ltc6811DaisyChain_t senseBoards;
+
 // Functions ------------------------------------------------------------------------------------------------------------------
 
 /**
  * @brief Initializes the BMS's peripherals.
+ * @return False if a fatal peripheral failed to initialize, true otherwise.
  */
-void peripheralsInit (void);
+bool peripheralsInit (void);
 
 /**
  * @brief Re-initializes the BMS's peripherals after a change has been made to the on-board EEPROM.

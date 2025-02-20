@@ -47,12 +47,16 @@ typedef struct
 {
 	ltc6811ChainState_t state;
 	ioline_t miso;
-	SPIConfig* config;
+	SPIConfig config;
 	SPIDriver* driver;
 	ltc6811_t* devices;
 	uint16_t deviceCount;
 } ltc6811DaisyChain_t;
 
 // Functions ------------------------------------------------------------------------------------------------------------------
+
+void ltc6811ChainWriteTest (ltc6811DaisyChain_t* chain);
+
+void ltc6811ChainReadTest (ltc6811DaisyChain_t* chain);
 
 #endif // LTC6811_H

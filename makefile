@@ -22,6 +22,7 @@ CSRC =	$(ALLCSRC)					\
 
 # Common library includes
 include common/src/fault_handler.mk
+include common/src/peripherals/mc24lc32.mk
 
 # Compiler flags
 USE_OPT = -Og -Wall -Wextra

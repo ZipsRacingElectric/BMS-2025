@@ -1,7 +1,9 @@
 // Battery Management System --------------------------------------------------------------------------------------------------
-// 
+//
 // Author: Cole Barach
 // Date Created: 2024.11.05
+//
+// Description: Entrypoint and interrupt handlers for the vehicle's battery management system.
 
 // Includes -------------------------------------------------------------------------------------------------------------------
 
@@ -28,7 +30,9 @@ int main (void)
 		chThdSleepMilliseconds (500);
 }
 
-void faultCallback (void)
+// Interrupts -----------------------------------------------------------------------------------------------------------------
+
+void hardFaultCallback (void)
 {
 	// TODO(Barach):
 	// Fault handler implementation

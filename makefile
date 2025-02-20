@@ -14,9 +14,11 @@ BOARDDIR := ./build/board
 ALLINC += src
 
 # Source files
-CSRC =	$(ALLCSRC)		\
-		src/main.c		\
-		src/debug.c
+CSRC =	$(ALLCSRC)					\
+		src/main.c					\
+		src/debug.c					\
+									\
+		src/peripherals/ltc6811.c	\
 
 # Common library includes
 include common/src/fault_handler.mk

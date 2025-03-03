@@ -3,8 +3,8 @@
 
 // Global Peripherals ---------------------------------------------------------------------------------------------------------
 
-mc24lc32_t			eeprom;
-eepromMap_t*		eepromMap;
+mc24lc32_t		eeprom;
+eepromMap_t*	eepromMap;
 
 #define LTC_COUNT 12
 ltc6811_t ltcs [LTC_COUNT] =
@@ -20,14 +20,16 @@ ltc6811DaisyChain_t	senseBoards =
 	.miso			= LINE_SPI1_MISO,
 	.config 		=
 	{
-		.circular	= false,
-		.slave		= false,
-		.cr1		= 0,
-		.cr2		= 0,
-		.data_cb	= NULL,
-		.error_cb	= NULL,
-		.ssport		= PAL_PORT (LINE_CS_ISOSPI),
-		.sspad		= PAL_PAD (LINE_CS_ISOSPI)
+		.circular	= false,						// Linear buffer.
+		.slave		= false,						// Device is in master mode.
+		.cr1		= 0								// 2-line unidirectional, no CRC, MSB first, master mode, clock idles high,
+													// data capture on first clock transition.
+					| 0b111 << SPI_CR1_BR_Pos,		// Baudrate 328125 bps.
+		.cr2		= 0,							// Default CR2 config.
+		.data_cb	= NULL,							// No callbacks.
+		.error_cb	= NULL,							//
+		.ssport		= PAL_PORT (LINE_CS_ISOSPI),	// IsoSPI transceiver CS pin.
+		.sspad		= PAL_PAD (LINE_CS_ISOSPI)		//
 	},
 	.driver			= &SPID1,
 	.devices		= ltcs,

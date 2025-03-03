@@ -293,6 +293,10 @@ bool readRegisterGroups (ltc6811DaisyChain_t* chain, uint16_t command)
 
 void ltc6811ChainWriteTest (ltc6811DaisyChain_t* chain)
 {
+	#if SPI_USE_MUTUAL_EXCLUSION
+	spiAcquireBus (chain->driver);
+	#endif // SPI_USE_MUTUAL_EXCLUSION
+
 	// Write a pattern to a place where it won't cause any damage.
 	for (uint16_t index = 0; index < chain->deviceCount; ++index)
 	{
@@ -307,12 +311,24 @@ void ltc6811ChainWriteTest (ltc6811DaisyChain_t* chain)
 	volatile bool result = writeRegisterGroups (chain, COMMAND_WRCFGA);
 	result = result;
 	__BKPT ();
+
+	#if SPI_USE_MUTUAL_EXCLUSION
+	spiReleaseBus (chain->driver);
+	#endif // SPI_USE_MUTUAL_EXCLUSION
 }
 
 void ltc6811ChainReadTest (ltc6811DaisyChain_t* chain)
 {
+	#if SPI_USE_MUTUAL_EXCLUSION
+	spiAcquireBus (chain->driver);
+	#endif // SPI_USE_MUTUAL_EXCLUSION
+
 	// Read the data back and check what it reads.
 	volatile bool result = readRegisterGroups (chain, COMMAND_RDCFGA);
 	result = result;
 	__BKPT ();
+
+	#if SPI_USE_MUTUAL_EXCLUSION
+	spiReleaseBus (chain->driver);
+	#endif // SPI_USE_MUTUAL_EXCLUSION
 }

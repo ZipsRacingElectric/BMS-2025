@@ -37,30 +37,6 @@
 /// @brief Buffer to read/write irrelevant data from/to. Used in SPI transactions where the data doesn't matter.
 static uint8_t nullBuffer [LTC6811_BUFFER_SIZE];
 
-// TODO(Barach): LUT generated using:
-/*
-	int16_t remainder;
-    uint16_t i;
-    for (i = 0; i < 256; i++)
-    {
-        remainder = i << 7;
-        uint8_t bit;
-        for (bit = 8; bit > 0; --bit)
-        {
-            if (remainder & 0x4000)
-            {
-                remainder = ((remainder << 1));
-                remainder = (remainder ^ CRC15_POLY);
-            }
-            else
-            {
-                remainder = ((remainder << 1));
-            }
-        }
-        pec15Table[i] = remainder&0xFFFF;
-    }
-*/
-
 /// @brief Lookup table for calculating a frame's PEC. (See @c calculatePec )
 static const uint16_t pecLut [] =
 {
@@ -182,11 +158,11 @@ void wakeupDaisyChain (ltc6811DaisyChain_t* chain)
 	for (uint16_t index = 0; index < chain->deviceCount; ++index)
 	{
 		// Drive CS low for the maximum wakeup time (guarantees this device will wake).
-		spiStart (chain->driver, &chain->config);
+		spiSelect (chain->driver);
 		chThdSleep (T_WAKE_MAX);
 
 		// Release CS and allow the device to enter the ready state.
-		spiStop (chain->driver);
+		spiUnselect (chain->driver);
 		chThdSleep (T_READY_MAX);
 	}
 }
@@ -209,8 +185,12 @@ bool writeRegisterGroups (ltc6811DaisyChain_t* chain, uint16_t command)
 	// Where bytes [12, 19] are repeated down to device 0.
 
 	// Write the command word followed by the PEC word.
-	uint16_t pec = calculatePec ((uint8_t*) &command, sizeof (uint16_t));
-	uint8_t tx [sizeof (uint16_t) * 2] = { command >> 8, command, pec >> 8, pec };
+	uint8_t tx [sizeof (uint16_t) * 2] = { command >> 8, command };
+	uint16_t pec = calculatePec (tx, 2);
+	tx [2] = pec >> 8;
+	tx [3] = pec;
+
+	spiSelect (chain->driver);
 
 	if (spiExchange (chain->driver, sizeof (tx), tx, nullBuffer) != MSG_OK)
 	{
@@ -234,11 +214,15 @@ bool writeRegisterGroups (ltc6811DaisyChain_t* chain, uint16_t command)
 		}
 	}
 
+	spiUnselect (chain->driver);
+
 	return true;
 }
 
 bool readRegisterGroups (ltc6811DaisyChain_t* chain, uint16_t command)
 {
+	// TODO(Barach): Retry if invalid PEC.
+
 	// See LTC6811 datasheet, pg.58 for more info.
 
 	// Transmit Frame:
@@ -259,8 +243,12 @@ bool readRegisterGroups (ltc6811DaisyChain_t* chain, uint16_t command)
 	// Where bytes [8, 15] are repeated up to device N-1.
 
 	// Write the command word followed by the PEC word.
-	uint16_t pec = calculatePec ((uint8_t*) &command, sizeof (uint16_t));
-	uint8_t tx [sizeof (uint16_t) * 2] = { command >> 8, command, pec >> 8, pec };
+	uint8_t tx [sizeof (uint16_t) * 2] = { command >> 8, command };
+	uint16_t pec = calculatePec (tx, 2);
+	tx [2] = pec >> 8;
+	tx [3] = pec;
+
+	spiSelect (chain->driver);
 
 	if (spiExchange (chain->driver, sizeof (tx), tx, nullBuffer) != MSG_OK)
 	{
@@ -277,7 +265,12 @@ bool readRegisterGroups (ltc6811DaisyChain_t* chain, uint16_t command)
 			chain->state = LTC6811_CHAIN_STATE_FAILED;
 			return false;
 		}
+	}
 
+	spiUnselect (chain->driver);
+
+	for (uint16_t index = 0; index < chain->deviceCount; ++index)
+	{
 		// Validate the PEC of the frame.
 		pec = chain->devices [index].rx [LTC6811_BUFFER_SIZE - 1] | (chain->devices [index].rx [LTC6811_BUFFER_SIZE - 2] << 8);
 		if (!validatePec (chain->devices [index].rx, LTC6811_BUFFER_SIZE - 2, pec))
@@ -297,6 +290,10 @@ void ltc6811ChainWriteTest (ltc6811DaisyChain_t* chain)
 	spiAcquireBus (chain->driver);
 	#endif // SPI_USE_MUTUAL_EXCLUSION
 
+	spiStart (chain->driver, &chain->config);
+
+	wakeupDaisyChain (chain);
+
 	// Write a pattern to a place where it won't cause any damage.
 	for (uint16_t index = 0; index < chain->deviceCount; ++index)
 	{
@@ -312,6 +309,8 @@ void ltc6811ChainWriteTest (ltc6811DaisyChain_t* chain)
 	result = result;
 	__BKPT ();
 
+	spiStop (chain->driver);
+
 	#if SPI_USE_MUTUAL_EXCLUSION
 	spiReleaseBus (chain->driver);
 	#endif // SPI_USE_MUTUAL_EXCLUSION
@@ -323,10 +322,16 @@ void ltc6811ChainReadTest (ltc6811DaisyChain_t* chain)
 	spiAcquireBus (chain->driver);
 	#endif // SPI_USE_MUTUAL_EXCLUSION
 
+	spiStart (chain->driver, &chain->config);
+
+	wakeupDaisyChain (chain);
+
 	// Read the data back and check what it reads.
 	volatile bool result = readRegisterGroups (chain, COMMAND_RDCFGA);
 	result = result;
 	__BKPT ();
+
+	spiStop (chain->driver);
 
 	#if SPI_USE_MUTUAL_EXCLUSION
 	spiReleaseBus (chain->driver);

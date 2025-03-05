@@ -6,7 +6,7 @@
 mc24lc32_t		eeprom;
 eepromMap_t*	eepromMap;
 
-#define LTC_COUNT 12
+#define LTC_COUNT 1
 ltc6811_t ltcs [LTC_COUNT] =
 {
 	{

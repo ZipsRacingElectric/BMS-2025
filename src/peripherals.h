@@ -24,7 +24,7 @@ extern mc24lc32_t eeprom;
 extern eepromMap_t* eepromMap;
 
 // TODO(Barach): Docs
-extern ltc6811DaisyChain_t senseBoards;
+extern ltc6811DaisyChain_t ltcChain;
 
 // Functions ------------------------------------------------------------------------------------------------------------------
 

@@ -45,15 +45,31 @@ typedef struct
 
 typedef struct
 {
-	ltc6811ChainState_t state;
-	ioline_t miso;
-	SPIConfig config;
-	SPIDriver* driver;
+	/// @brief The SPI bus the daisy chain is connected to.
+	SPIDriver* spiDriver;
+
+	/// @brief The SPI configuration of the daisy chain.
+	SPIConfig spiConfig;
+
+	/// @brief The array of @c ltc6811_t devices forming the daisy chain.
 	ltc6811_t* devices;
+
+	/// @brief The number of devices in the daisy chain, size of @c devices .
 	uint16_t deviceCount;
+
+	/// @brief The number of times to attempt a read operation before failing.
+	uint16_t readAttemptCount;
+} ltc6811DaisyChainConfig_t;
+
+typedef struct
+{
+	ltc6811ChainState_t			state;
+	ltc6811DaisyChainConfig_t*	config;
 } ltc6811DaisyChain_t;
 
 // Functions ------------------------------------------------------------------------------------------------------------------
+
+bool ltc6811Init (ltc6811DaisyChain_t* chain, ltc6811DaisyChainConfig_t* config);
 
 void ltc6811ChainWriteTest (ltc6811DaisyChain_t* chain);
 

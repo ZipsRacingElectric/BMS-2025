@@ -38,7 +38,7 @@
 static uint8_t nullBuffer [LTC6811_BUFFER_SIZE];
 
 /// @brief Lookup table for calculating a frame's PEC. (See @c calculatePec )
-static const uint16_t pecLut [] =
+static const uint16_t PEC_LUT [] =
 {
 	0x0000, 0xC599, 0xCEAB, 0x0B32, 0xD8CF, 0x1D56, 0x1664, 0xD3FD,
 	0xF407, 0x319E, 0x3AAC, 0xFF35, 0x2CC8, 0xE951, 0xE263, 0x27FA,
@@ -98,7 +98,7 @@ bool validatePec (uint8_t* data, uint8_t dataCount, uint16_t pec);
  * regardless of the previous state of the daisy-chain.
  * @param chain The daisy-chain to wake up.
  */
-void wakeupDaisyChain (ltc6811DaisyChain_t* chain);
+void wakeupDaisyChainSleep (ltc6811DaisyChain_t* chain);
 
 /**
  * @brief Writes to a data register group of each device in a chain.
@@ -120,6 +120,71 @@ bool readRegisterGroups (ltc6811DaisyChain_t* chain, uint16_t command);
 
 // Functions ------------------------------------------------------------------------------------------------------------------
 
+bool ltc6811Init (ltc6811DaisyChain_t* chain, ltc6811DaisyChainConfig_t* config)
+{
+	chain->config = config;
+
+	for (uint16_t index = 0; index < chain->config->deviceCount; ++index)
+		chain->config->devices [index].state = LTC6811_STATE_READY;
+
+	// TODO(Barach): Check and initializations.
+	return true;
+}
+
+void ltc6811ChainWriteTest (ltc6811DaisyChain_t* chain)
+{
+	// Acquire the SPI bus and start the driver.
+	#if SPI_USE_MUTUAL_EXCLUSION
+	spiAcquireBus (chain->config->spiDriver);
+	#endif // SPI_USE_MUTUAL_EXCLUSION
+	spiStart (chain->config->spiDriver, &chain->config->spiConfig);
+
+	wakeupDaisyChainSleep (chain);
+
+	// Write a pattern to a place where it won't cause any damage.
+	for (uint16_t index = 0; index < chain->config->deviceCount; ++index)
+	{
+		chain->config->devices [index].tx [0] = 0x00;
+		chain->config->devices [index].tx [1] = index;									// VUV
+		chain->config->devices [index].tx [2] = chain->config->deviceCount - index - 1;	// VUV / VOV
+		chain->config->devices [index].tx [3] = 0xAB;
+		chain->config->devices [index].tx [4] = 0xCD;
+		chain->config->devices [index].tx [5] = 0x00;
+	}
+
+	volatile bool result = writeRegisterGroups (chain, COMMAND_WRCFGA);
+	result = result;
+	__BKPT ();
+
+	// Release the SPI bus
+	spiStop (chain->config->spiDriver);
+	#if SPI_USE_MUTUAL_EXCLUSION
+	spiReleaseBus (chain->config->spiDriver);
+	#endif // SPI_USE_MUTUAL_EXCLUSION
+}
+
+void ltc6811ChainReadTest (ltc6811DaisyChain_t* chain)
+{
+	// Acquire the SPI bus and start the driver.
+	#if SPI_USE_MUTUAL_EXCLUSION
+	spiAcquireBus (chain->config->spiDriver);
+	#endif // SPI_USE_MUTUAL_EXCLUSION
+	spiStart (chain->config->spiDriver, &chain->config->spiConfig);
+
+	wakeupDaisyChainSleep (chain);
+
+	// Read the data back and check what it reads.
+	volatile bool result = readRegisterGroups (chain, COMMAND_RDCFGA);
+	result = result;
+	__BKPT ();
+
+	// Release the SPI bus
+	spiStop (chain->config->spiDriver);
+	#if SPI_USE_MUTUAL_EXCLUSION
+	spiReleaseBus (chain->config->spiDriver);
+	#endif // SPI_USE_MUTUAL_EXCLUSION
+}
+
 uint16_t calculatePec (uint8_t* data, uint8_t dataCount)
 {
 	// The Packet Error Code (PEC) is a 15-bit CRC, generated using the following polynomial:
@@ -134,7 +199,7 @@ uint16_t calculatePec (uint8_t* data, uint8_t dataCount)
 	for (uint8_t index = 0; index < dataCount; ++index)
 	{
 		uint8_t addr = ((remainder >> 7) ^ data [index]);
-		remainder = (remainder << 8) ^ pecLut [addr];
+		remainder = (remainder << 8) ^ PEC_LUT [addr];
 	}
 
 	// The LSB of the PEC word is a 0, so left shift once to align it.
@@ -148,21 +213,23 @@ bool validatePec (uint8_t* data, uint8_t dataCount, uint16_t pec)
 	return pec == actualPec;
 }
 
-void wakeupDaisyChain (ltc6811DaisyChain_t* chain)
+void wakeupDaisyChainSleep (ltc6811DaisyChain_t* chain)
 {
 	// Sends a wakeup signal using the algorithm described in "Waking a Daisy Chain - Method 2"
 	// See LTC6811 datasheet, pg.52 for more info.
 
-	// Wake each device individually. If all devices are sleeping, the first pulse should wake all of them. If any devices in
-	// the middle of the stack don't propogate the first wakeup signal, the following ones will be.
-	for (uint16_t index = 0; index < chain->deviceCount; ++index)
+	// Wake each device individually. If a device in the stack is not in the ready state, it won't propogate the first signal
+	// it receives, rather it will wake up and enter the ready state. Once said device is in the ready state, it will propogate
+	// the next signal it receives. By sending N signals, we are allowing the first N - 1 devices to not propogate the first
+	// signal they receive, in turn guaranteeing that all N devices will receive at least 1 signal.
+	for (uint16_t index = 0; index < chain->config->deviceCount; ++index)
 	{
 		// Drive CS low for the maximum wakeup time (guarantees this device will wake).
-		spiSelect (chain->driver);
+		spiSelect (chain->config->spiDriver);
 		chThdSleep (T_WAKE_MAX);
 
 		// Release CS and allow the device to enter the ready state.
-		spiUnselect (chain->driver);
+		spiUnselect (chain->config->spiDriver);
 		chThdSleep (T_READY_MAX);
 	}
 }
@@ -190,39 +257,39 @@ bool writeRegisterGroups (ltc6811DaisyChain_t* chain, uint16_t command)
 	tx [2] = pec >> 8;
 	tx [3] = pec;
 
-	spiSelect (chain->driver);
+	spiSelect (chain->config->spiDriver);
 
-	if (spiExchange (chain->driver, sizeof (tx), tx, nullBuffer) != MSG_OK)
+	if (spiExchange (chain->config->spiDriver, sizeof (tx), tx, nullBuffer) != MSG_OK)
 	{
+		spiUnselect (chain->config->spiDriver);
 		chain->state = LTC6811_CHAIN_STATE_FAILED;
 		return false;
 	}
 
 	// Write each individual device's register group.
 	// Note the first written data goes to the last device in the stack (device N-1).
-	for (int16_t index = chain->deviceCount - 1; index >= 0; --index)
+	for (int16_t index = chain->config->deviceCount - 1; index >= 0; --index)
 	{
-		// TODO(Barach): Calc PEC?
-		pec = calculatePec (chain->devices [index].tx, LTC6811_BUFFER_SIZE - sizeof(uint16_t));
-		chain->devices [index].tx [LTC6811_BUFFER_SIZE - 2] = pec >> 8;
-		chain->devices [index].tx [LTC6811_BUFFER_SIZE - 1] = pec;
+		pec = calculatePec (chain->config->devices [index].tx, LTC6811_BUFFER_SIZE - sizeof(uint16_t));
+		chain->config->devices [index].tx [LTC6811_BUFFER_SIZE - 2] = pec >> 8;
+		chain->config->devices [index].tx [LTC6811_BUFFER_SIZE - 1] = pec;
 
-		if (spiExchange (chain->driver, LTC6811_BUFFER_SIZE, chain->devices [index].tx, nullBuffer) != MSG_OK)
+		if (spiExchange (chain->config->spiDriver, LTC6811_BUFFER_SIZE, chain->config->devices [index].tx, nullBuffer)
+			!= MSG_OK)
 		{
+			spiUnselect (chain->config->spiDriver);
 			chain->state = LTC6811_CHAIN_STATE_FAILED;
 			return false;
 		}
 	}
 
-	spiUnselect (chain->driver);
+	spiUnselect (chain->config->spiDriver);
 
 	return true;
 }
 
 bool readRegisterGroups (ltc6811DaisyChain_t* chain, uint16_t command)
 {
-	// TODO(Barach): Retry if invalid PEC.
-
 	// See LTC6811 datasheet, pg.58 for more info.
 
 	// Transmit Frame:
@@ -242,98 +309,68 @@ bool readRegisterGroups (ltc6811DaisyChain_t* chain, uint16_t command)
 	// -------------------------------------------------------------------
 	// Where bytes [8, 15] are repeated up to device N-1.
 
-	// Write the command word followed by the PEC word.
-	uint8_t tx [sizeof (uint16_t) * 2] = { command >> 8, command };
-	uint16_t pec = calculatePec (tx, 2);
-	tx [2] = pec >> 8;
-	tx [3] = pec;
-
-	spiSelect (chain->driver);
-
-	if (spiExchange (chain->driver, sizeof (tx), tx, nullBuffer) != MSG_OK)
+	for (uint16_t attempt = 0; attempt < chain->config->readAttemptCount; ++attempt)
 	{
-		chain->state = LTC6811_CHAIN_STATE_FAILED;
-		return false;
-	}
+		// TODO(Barach): The control of this is messy.
 
-	// Read each individual device's register group.
-	// Note the first read data comes from the first device in the stack (device 0).
-	for (uint16_t index = 0; index < chain->deviceCount; ++index)
-	{
-		if (spiExchange (chain->driver, LTC6811_BUFFER_SIZE, nullBuffer, chain->devices [index].rx) != MSG_OK)
+		// Write the command word followed by the PEC word.
+		uint8_t tx [sizeof (uint16_t) * 2] = { command >> 8, command };
+		uint16_t pec = calculatePec (tx, 2);
+		tx [2] = pec >> 8;
+		tx [3] = pec;
+
+		spiSelect (chain->config->spiDriver);
+
+		if (spiExchange (chain->config->spiDriver, sizeof (tx), tx, nullBuffer) != MSG_OK)
 		{
+			// If a SPI error occurs, something has failed inside the STM, re-attempting will not help.
+			spiUnselect (chain->config->spiDriver);
 			chain->state = LTC6811_CHAIN_STATE_FAILED;
 			return false;
 		}
-	}
 
-	spiUnselect (chain->driver);
-
-	for (uint16_t index = 0; index < chain->deviceCount; ++index)
-	{
-		// Validate the PEC of the frame.
-		pec = chain->devices [index].rx [LTC6811_BUFFER_SIZE - 1] | (chain->devices [index].rx [LTC6811_BUFFER_SIZE - 2] << 8);
-		if (!validatePec (chain->devices [index].rx, LTC6811_BUFFER_SIZE - 2, pec))
+		// Read each individual device's register group.
+		// Note the first read data comes from the first device in the stack (device 0).
+		for (uint16_t index = 0; index < chain->config->deviceCount; ++index)
 		{
-			chain->devices [index].state = LTC6811_STATE_PEC_ERROR;
-			chain->state = LTC6811_CHAIN_STATE_FAILED;
-			return false;
+			if (spiExchange (chain->config->spiDriver, LTC6811_BUFFER_SIZE, nullBuffer, chain->config->devices [index].rx)
+				!= MSG_OK)
+			{
+				// If a SPI error occurs, something has failed inside the STM, re-attempting will not help.
+				spiUnselect (chain->config->spiDriver);
+				chain->state = LTC6811_CHAIN_STATE_FAILED;
+				return false;
+			}
 		}
+
+		spiUnselect (chain->config->spiDriver);
+
+		// Validate the PEC of each device's frame.
+		bool result = true;
+		for (uint16_t index = 0; index < chain->config->deviceCount; ++index)
+		{
+			pec = chain->config->devices [index].rx [LTC6811_BUFFER_SIZE - 1] |
+				(chain->config->devices [index].rx [LTC6811_BUFFER_SIZE - 2] << 8);
+
+			if (!validatePec (chain->config->devices [index].rx, LTC6811_BUFFER_SIZE - 2, pec))
+			{
+				result = false;
+
+				// If this is not the last attempt, re-attempt the entire operation.
+				if (attempt != chain->config->readAttemptCount - 1)
+					break;
+
+				// If this is the last attempt, fail the device and continue checking the others.
+				chain->config->devices [index].state = LTC6811_STATE_PEC_ERROR;
+				chain->state = LTC6811_CHAIN_STATE_FAILED;
+			}
+		}
+
+		// If each device's PEC was valid, success.
+		if (result)
+			return true;
 	}
 
-	return true;
-}
-
-void ltc6811ChainWriteTest (ltc6811DaisyChain_t* chain)
-{
-	#if SPI_USE_MUTUAL_EXCLUSION
-	spiAcquireBus (chain->driver);
-	#endif // SPI_USE_MUTUAL_EXCLUSION
-
-	spiStart (chain->driver, &chain->config);
-
-	wakeupDaisyChain (chain);
-
-	// Write a pattern to a place where it won't cause any damage.
-	for (uint16_t index = 0; index < chain->deviceCount; ++index)
-	{
-		chain->devices [index].tx [0] = 0x00;
-		chain->devices [index].tx [1] = index; // VUV
-		chain->devices [index].tx [2] = chain->deviceCount - index - 1; // VUV / VOV
-		chain->devices [index].tx [3] = 0x00;
-		chain->devices [index].tx [4] = 0x00;
-		chain->devices [index].tx [5] = 0x00;
-	}
-
-	volatile bool result = writeRegisterGroups (chain, COMMAND_WRCFGA);
-	result = result;
-	__BKPT ();
-
-	spiStop (chain->driver);
-
-	#if SPI_USE_MUTUAL_EXCLUSION
-	spiReleaseBus (chain->driver);
-	#endif // SPI_USE_MUTUAL_EXCLUSION
-}
-
-void ltc6811ChainReadTest (ltc6811DaisyChain_t* chain)
-{
-	#if SPI_USE_MUTUAL_EXCLUSION
-	spiAcquireBus (chain->driver);
-	#endif // SPI_USE_MUTUAL_EXCLUSION
-
-	spiStart (chain->driver, &chain->config);
-
-	wakeupDaisyChain (chain);
-
-	// Read the data back and check what it reads.
-	volatile bool result = readRegisterGroups (chain, COMMAND_RDCFGA);
-	result = result;
-	__BKPT ();
-
-	spiStop (chain->driver);
-
-	#if SPI_USE_MUTUAL_EXCLUSION
-	spiReleaseBus (chain->driver);
-	#endif // SPI_USE_MUTUAL_EXCLUSION
+	// Last attempt failed, fail the whole operation.
+	return false;
 }

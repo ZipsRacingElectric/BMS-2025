@@ -7,34 +7,9 @@ mc24lc32_t		eeprom;
 eepromMap_t*	eepromMap;
 
 #define LTC_COUNT 1
-ltc6811_t ltcs [LTC_COUNT] =
-{
-	{
-		.state = LTC6811_STATE_READY
-	}
-};
+ltc6811_t ltcs [LTC_COUNT];
 
-ltc6811DaisyChain_t	senseBoards =
-{
-	.state			= LTC6811_CHAIN_STATE_READY,
-	.miso			= LINE_SPI1_MISO,
-	.config 		=
-	{
-		.circular	= false,						// Linear buffer.
-		.slave		= false,						// Device is in master mode.
-		.cr1		= 0								// 2-line unidirectional, no CRC, MSB first, master mode, clock idles high,
-													// data capture on first clock transition.
-					| 0b111 << SPI_CR1_BR_Pos,		// Baudrate 328125 bps.
-		.cr2		= 0,							// Default CR2 config.
-		.data_cb	= NULL,							// No callbacks.
-		.error_cb	= NULL,							//
-		.ssport		= PAL_PORT (LINE_CS_ISOSPI),	// IsoSPI transceiver CS pin.
-		.sspad		= PAL_PAD (LINE_CS_ISOSPI)		//
-	},
-	.driver			= &SPID1,
-	.devices		= ltcs,
-	.deviceCount	= LTC_COUNT
-};
+ltc6811DaisyChain_t ltcChain;
 
 // Configuration --------------------------------------------------------------------------------------------------------------
 
@@ -55,6 +30,28 @@ static const mc24lc32Config_t EEPROM_CONFIG =
 	.magicString	= EEPROM_MAP_STRING
 };
 
+/// @brief Configuration for the LTC daisy chain.
+ltc6811DaisyChainConfig_t ltcChainConfig =
+{
+	.spiDriver			= &SPID1,
+	.spiConfig 			=
+	{
+		.circular		= false,						// Linear buffer.
+		.slave			= false,						// Device is in master mode.
+		.cr1			= 0								// 2-line unidirectional, no CRC, MSB first, master mode, clock idles
+														// high, data capture on first clock transition.
+						| 0b111 << SPI_CR1_BR_Pos,		// Baudrate 328125 bps.
+		.cr2			= 0,							// Default CR2 config.
+		.data_cb		= NULL,							// No callbacks.
+		.error_cb		= NULL,							//
+		.ssport			= PAL_PORT (LINE_CS_ISOSPI),	// IsoSPI transceiver CS pin.
+		.sspad			= PAL_PAD (LINE_CS_ISOSPI)		//
+	},
+	.devices			= ltcs,
+	.deviceCount		= LTC_COUNT,
+	.readAttemptCount	= 5
+};
+
 // Functions ------------------------------------------------------------------------------------------------------------------
 
 bool peripheralsInit (void)
@@ -67,6 +64,10 @@ bool peripheralsInit (void)
 	if (!mc24lc32Init (&eeprom, &EEPROM_CONFIG) && eeprom.state == MC24LC32_STATE_FAILED)
 		return false;
 	eepromMap = (eepromMap_t*) eeprom.cache;
+
+	// LTC daisy chain initialization
+	if (!ltc6811Init (&ltcChain, &ltcChainConfig))
+		return false;
 
 	// Re-configurable peripherals are not considered fatal.
 	peripheralsReconfigure ();

@@ -13,7 +13,7 @@
 
 // Includes -------------------------------------------------------------------------------------------------------------------
 
-// Includes
+// ChibiOS
 #include "hal.h"
 
 // Constants ------------------------------------------------------------------------------------------------------------------
@@ -22,6 +22,15 @@
 #define LTC6811_BUFFER_SIZE		8
 
 // Datatypes ------------------------------------------------------------------------------------------------------------------
+
+// TODO(Barach): This doesn't support ADCOPT = 1 modes.
+typedef enum
+{
+	LTC6811_ADC_422HZ	= 0b00,
+	LTC6811_ADC_27KHZ	= 0b01,
+	LTC6811_ADC_7KHZ	= 0b10,
+	LTC6811_ADC_26HZ	= 0b11,
+} ltc6811AdcMode_t;
 
 typedef enum
 {
@@ -51,6 +60,9 @@ typedef struct
 	/// @brief The SPI configuration of the daisy chain.
 	SPIConfig spiConfig;
 
+	/// @brief The MISO line of the SPI bus.
+	ioline_t spiMiso;
+
 	/// @brief The array of @c ltc6811_t devices forming the daisy chain.
 	ltc6811_t* devices;
 
@@ -59,6 +71,8 @@ typedef struct
 
 	/// @brief The number of times to attempt a read operation before failing.
 	uint16_t readAttemptCount;
+
+	ltc6811AdcMode_t cellVoltageMode;
 } ltc6811DaisyChainConfig_t;
 
 typedef struct
@@ -71,8 +85,10 @@ typedef struct
 
 bool ltc6811Init (ltc6811DaisyChain_t* chain, ltc6811DaisyChainConfig_t* config);
 
-void ltc6811ChainWriteTest (ltc6811DaisyChain_t* chain);
+bool ltc6811SampleVoltages (ltc6811DaisyChain_t* chain);
 
-void ltc6811ChainReadTest (ltc6811DaisyChain_t* chain);
+void ltc6811WriteTest (ltc6811DaisyChain_t* chain);
+
+void ltc6811ReadTest (ltc6811DaisyChain_t* chain);
 
 #endif // LTC6811_H

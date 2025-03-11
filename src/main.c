@@ -41,13 +41,6 @@ int main (void)
 		while (true);
 	}
 
-	// Test read, should be default values
-	ltc6811ChainReadTest (&ltcChain);
-	// Test write, should succeed
-	ltc6811ChainWriteTest (&ltcChain);
-	// Test read, should read written values
-	ltc6811ChainReadTest (&ltcChain);
-
 	// Do nothing.
 	while (true)
 		chThdSleepMilliseconds (500);

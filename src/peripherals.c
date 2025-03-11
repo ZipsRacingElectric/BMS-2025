@@ -49,7 +49,8 @@ ltc6811DaisyChainConfig_t ltcChainConfig =
 	},
 	.devices			= ltcs,
 	.deviceCount		= LTC_COUNT,
-	.readAttemptCount	= 5
+	.readAttemptCount	= 5,
+	.cellVoltageMode	= LTC6811_ADC_26HZ
 };
 
 // Functions ------------------------------------------------------------------------------------------------------------------

@@ -34,6 +34,12 @@
 #define COMMAND_CVST(md, st)			(0b01000000111 | ((md) << 7) | ((st) << 5))
 #define COMMAND_ADOL(md, dcp)			(0b01000000001 | ((md) << 7) | ((dcp) << 4))
 
+#define COMMAND_PLADC					0b11100010100
+
+// 100 uV / LSB
+#define CELL_VOLTAGE_FACTOR				0.0001f
+#define WORD_TO_CELL_VOLTAGE(word)		(((uint16_t) (word)) * CELL_VOLTAGE_FACTOR)
+
 /// @brief Buffer to read/write irrelevant data from/to. Used in SPI transactions where the data doesn't matter.
 static uint8_t nullBuffer [LTC6811_BUFFER_SIZE];
 
@@ -74,6 +80,15 @@ static const uint16_t PEC_LUT [] =
 	0x5368, 0x96F1, 0x9DC3, 0x585A, 0x8BA7, 0x4E3E, 0x450C, 0x8095
 };
 
+/// @brief The total conversion time of the voltage ADC in each mode. Indexed by @c ltc6811AdcMode_t .
+static const systime_t ADC_TIMEOUTS_ALL_CELLS [] =
+{
+	TIME_US2I (12800),	// 422 Hz
+	TIME_US2I (1100),	// 27 kHz
+	TIME_US2I (2300),	// 7 kHz
+	TIME_MS2I (34)		// 26 Hz
+};
+
 // Function Prototypes --------------------------------------------------------------------------------------------------------
 
 /**
@@ -82,7 +97,7 @@ static const uint16_t PEC_LUT [] =
  * @param dataCount The number of elements in @c data .
  * @return The calculated PEC word. Note this value is already shifted to 0 the LSB.
  */
-uint16_t calculatePec (uint8_t* data, uint8_t dataCount);
+static uint16_t calculatePec (uint8_t* data, uint8_t dataCount);
 
 /**
  * @brief Checks whether the packet error code of a frame is correct.
@@ -91,14 +106,29 @@ uint16_t calculatePec (uint8_t* data, uint8_t dataCount);
  * @param pec The PEC to validate against.
  * @return True if the PEC is correct, false otherwise.
  */
-bool validatePec (uint8_t* data, uint8_t dataCount, uint16_t pec);
+static bool validatePec (uint8_t* data, uint8_t dataCount, uint16_t pec);
 
 /**
  * @brief Wakes up all devices in an LTC6811 daisy-chain. This method guarantees all devices are in the ready or standby state,
  * regardless of the previous state of the daisy-chain.
  * @param chain The daisy-chain to wake up.
  */
-void wakeupDaisyChainSleep (ltc6811DaisyChain_t* chain);
+static void wakeupSleep (ltc6811DaisyChain_t* chain);
+
+/**
+ * @brief Blocks until a previously scheduled ADC conversion is completed.
+ * @param chain The daisy-chain to poll.
+ * @return True if all device conversions are complete, false if a timeout occurred.
+ */
+static bool pollAdc (ltc6811DaisyChain_t* chain, sysinterval_t timeout);
+
+/**
+ * @brief Writes a command to each device in a chain.
+ * @param chain The chain to write to.
+ * @param command The command to write.
+ * @return True if successful, false otherwise.
+ */
+static bool writeCommand (ltc6811DaisyChain_t* chain, uint16_t command);
 
 /**
  * @brief Writes to a data register group of each device in a chain.
@@ -107,7 +137,7 @@ void wakeupDaisyChainSleep (ltc6811DaisyChain_t* chain);
  * @param command The write command of the register group.
  * @return True if successful, false otherwise.
  */
-bool writeRegisterGroups (ltc6811DaisyChain_t* chain, uint16_t command);
+static bool writeRegisterGroups (ltc6811DaisyChain_t* chain, uint16_t command);
 
 /**
  * @brief Reads from a data register group of each device in a chain.
@@ -116,7 +146,36 @@ bool writeRegisterGroups (ltc6811DaisyChain_t* chain, uint16_t command);
  * @param command The read command of the register group.
  * @return True if successful, false otherwise.
  */
-bool readRegisterGroups (ltc6811DaisyChain_t* chain, uint16_t command);
+static bool readRegisterGroups (ltc6811DaisyChain_t* chain, uint16_t command);
+
+/**
+ * @brief Writes the chain's configuration to each device's configuration register group.
+ * @param chain The chain to configure.
+ * @return True if successful, false otherwise.
+ */
+static bool configure (ltc6811DaisyChain_t* chain);
+
+static inline void start (ltc6811DaisyChain_t* chain)
+{
+	// Acquire the SPI bus (if enabled)
+	#if SPI_USE_MUTUAL_EXCLUSION
+	spiAcquireBus (chain->config->spiDriver);
+	#endif // SPI_USE_MUTUAL_EXCLUSION
+
+	// Start the SPI driver
+	spiStart (chain->config->spiDriver, &chain->config->spiConfig);
+}
+
+static inline void stop (ltc6811DaisyChain_t* chain)
+{
+	// Stop the SPI driver
+	spiStop (chain->config->spiDriver);
+
+	// Release the SPI bus (if enabled)
+	#if SPI_USE_MUTUAL_EXCLUSION
+	spiReleaseBus (chain->config->spiDriver);
+	#endif // SPI_USE_MUTUAL_EXCLUSION
+}
 
 // Functions ------------------------------------------------------------------------------------------------------------------
 
@@ -127,19 +186,93 @@ bool ltc6811Init (ltc6811DaisyChain_t* chain, ltc6811DaisyChainConfig_t* config)
 	for (uint16_t index = 0; index < chain->config->deviceCount; ++index)
 		chain->config->devices [index].state = LTC6811_STATE_READY;
 
-	// TODO(Barach): Check and initializations.
+	if (!configure (chain))
+		return false;
+
+	// TODO(Barach): Config checks and sampling.
+	return ltc6811SampleVoltages (chain);
+}
+
+bool ltc6811SampleVoltages (ltc6811DaisyChain_t* chain)
+{
+	start (chain);
+	wakeupSleep (chain);
+
+	// Start the cell voltage conversion for all cells, permitting discharge.
+	if (!writeCommand (chain, COMMAND_ADCV (chain->config->cellVoltageMode, false, 0b000)))
+	{
+		stop (chain);
+		return false;
+	}
+
+	if (!pollAdc (chain, ADC_TIMEOUTS_ALL_CELLS [chain->config->cellVoltageMode]))
+	{
+		stop (chain);
+		return false;
+	}
+
+	if (!readRegisterGroups (chain, COMMAND_RDCVA))
+	{
+		stop (chain);
+		return false;
+	}
+
+	for (uint16_t index = 0; index < chain->config->deviceCount; ++index)
+	{
+		chain->config->devices->cellVoltages [0] = WORD_TO_CELL_VOLTAGE ((chain->config->devices->rx [1] << 8) | chain->config->devices->rx [0]);
+		chain->config->devices->cellVoltages [1] = WORD_TO_CELL_VOLTAGE ((chain->config->devices->rx [3] << 8) | chain->config->devices->rx [2]);
+		chain->config->devices->cellVoltages [2] = WORD_TO_CELL_VOLTAGE ((chain->config->devices->rx [5] << 8) | chain->config->devices->rx [4]);
+	}
+
+	if (!readRegisterGroups (chain, COMMAND_RDCVB))
+	{
+		stop (chain);
+		return false;
+	}
+
+	for (uint16_t index = 0; index < chain->config->deviceCount; ++index)
+	{
+		chain->config->devices->cellVoltages [3] = WORD_TO_CELL_VOLTAGE ((chain->config->devices->rx [1] << 8) | chain->config->devices->rx [0]);
+		chain->config->devices->cellVoltages [4] = WORD_TO_CELL_VOLTAGE ((chain->config->devices->rx [3] << 8) | chain->config->devices->rx [2]);
+		chain->config->devices->cellVoltages [5] = WORD_TO_CELL_VOLTAGE ((chain->config->devices->rx [5] << 8) | chain->config->devices->rx [4]);
+	}
+
+	if (!readRegisterGroups (chain, COMMAND_RDCVC))
+	{
+		stop (chain);
+		return false;
+	}
+
+	for (uint16_t index = 0; index < chain->config->deviceCount; ++index)
+	{
+		chain->config->devices->cellVoltages [6] = WORD_TO_CELL_VOLTAGE ((chain->config->devices->rx [1] << 8) | chain->config->devices->rx [0]);
+		chain->config->devices->cellVoltages [7] = WORD_TO_CELL_VOLTAGE ((chain->config->devices->rx [3] << 8) | chain->config->devices->rx [2]);
+		chain->config->devices->cellVoltages [8] = WORD_TO_CELL_VOLTAGE ((chain->config->devices->rx [5] << 8) | chain->config->devices->rx [4]);
+	}
+
+	if (!readRegisterGroups (chain, COMMAND_RDCVD))
+	{
+		stop (chain);
+		return false;
+	}
+
+	for (uint16_t index = 0; index < chain->config->deviceCount; ++index)
+	{
+		chain->config->devices->cellVoltages [9] = WORD_TO_CELL_VOLTAGE ((chain->config->devices->rx [1] << 8) | chain->config->devices->rx [0]);
+		chain->config->devices->cellVoltages [10] = WORD_TO_CELL_VOLTAGE ((chain->config->devices->rx [3] << 8) | chain->config->devices->rx [2]);
+		chain->config->devices->cellVoltages [11] = WORD_TO_CELL_VOLTAGE ((chain->config->devices->rx [5] << 8) | chain->config->devices->rx [4]);
+	}
+
+	__BKPT ();
+
+	stop (chain);
 	return true;
 }
 
-void ltc6811ChainWriteTest (ltc6811DaisyChain_t* chain)
+void ltc6811WriteTest (ltc6811DaisyChain_t* chain)
 {
-	// Acquire the SPI bus and start the driver.
-	#if SPI_USE_MUTUAL_EXCLUSION
-	spiAcquireBus (chain->config->spiDriver);
-	#endif // SPI_USE_MUTUAL_EXCLUSION
-	spiStart (chain->config->spiDriver, &chain->config->spiConfig);
-
-	wakeupDaisyChainSleep (chain);
+	start (chain);
+	wakeupSleep (chain);
 
 	// Write a pattern to a place where it won't cause any damage.
 	for (uint16_t index = 0; index < chain->config->deviceCount; ++index)
@@ -156,33 +289,20 @@ void ltc6811ChainWriteTest (ltc6811DaisyChain_t* chain)
 	result = result;
 	__BKPT ();
 
-	// Release the SPI bus
-	spiStop (chain->config->spiDriver);
-	#if SPI_USE_MUTUAL_EXCLUSION
-	spiReleaseBus (chain->config->spiDriver);
-	#endif // SPI_USE_MUTUAL_EXCLUSION
+	stop (chain);
 }
 
-void ltc6811ChainReadTest (ltc6811DaisyChain_t* chain)
+void ltc6811ReadTest (ltc6811DaisyChain_t* chain)
 {
-	// Acquire the SPI bus and start the driver.
-	#if SPI_USE_MUTUAL_EXCLUSION
-	spiAcquireBus (chain->config->spiDriver);
-	#endif // SPI_USE_MUTUAL_EXCLUSION
-	spiStart (chain->config->spiDriver, &chain->config->spiConfig);
-
-	wakeupDaisyChainSleep (chain);
+	start (chain);
+	wakeupSleep (chain);
 
 	// Read the data back and check what it reads.
 	volatile bool result = readRegisterGroups (chain, COMMAND_RDCFGA);
 	result = result;
 	__BKPT ();
 
-	// Release the SPI bus
-	spiStop (chain->config->spiDriver);
-	#if SPI_USE_MUTUAL_EXCLUSION
-	spiReleaseBus (chain->config->spiDriver);
-	#endif // SPI_USE_MUTUAL_EXCLUSION
+	stop (chain);
 }
 
 uint16_t calculatePec (uint8_t* data, uint8_t dataCount)
@@ -213,7 +333,7 @@ bool validatePec (uint8_t* data, uint8_t dataCount, uint16_t pec)
 	return pec == actualPec;
 }
 
-void wakeupDaisyChainSleep (ltc6811DaisyChain_t* chain)
+void wakeupSleep (ltc6811DaisyChain_t* chain)
 {
 	// Sends a wakeup signal using the algorithm described in "Waking a Daisy Chain - Method 2"
 	// See LTC6811 datasheet, pg.52 for more info.
@@ -232,6 +352,71 @@ void wakeupDaisyChainSleep (ltc6811DaisyChain_t* chain)
 		spiUnselect (chain->config->spiDriver);
 		chThdSleep (T_READY_MAX);
 	}
+}
+
+bool pollAdc (ltc6811DaisyChain_t* chain, sysinterval_t timeout)
+{
+	// TODO(Barach): This should use the writeCommand function.
+
+	// Write the command word followed by the PEC word.
+	uint8_t tx [sizeof (uint16_t) * 2] = { COMMAND_PLADC >> 8, (uint8_t) COMMAND_PLADC };
+	uint16_t pec = calculatePec (tx, 2);
+	tx [2] = pec >> 8;
+	tx [3] = pec;
+
+	spiSelect (chain->config->spiDriver);
+
+	if (spiExchange (chain->config->spiDriver, sizeof (tx), tx, nullBuffer) != MSG_OK)
+	{
+		spiUnselect (chain->config->spiDriver);
+		chain->state = LTC6811_CHAIN_STATE_FAILED;
+		return false;
+	}
+
+	// If the conversion has already finished, exit early.
+	if (palReadLine (chain->config->spiMiso))
+	{
+		spiUnselect (chain->config->spiDriver);
+		return true;
+	}
+
+	// Wait for the conversion to finish.
+	palEnableLineEvent (chain->config->spiMiso, PAL_EVENT_MODE_RISING_EDGE);
+	palWaitLineTimeout (chain->config->spiMiso, timeout);
+	palDisableLineEvent (chain->config->spiMiso);
+
+	// If conversion is finished, success, otherwise failed.
+	bool result = palReadLine (chain->config->spiMiso);
+	spiUnselect (chain->config->spiDriver);
+	return result;
+}
+
+static bool writeCommand (ltc6811DaisyChain_t* chain, uint16_t command)
+{
+	// Transmit Frame:
+	//  0            1            2        3
+	// ---------------------------------------------
+	// | Command HI | Command LO | PEC HI | PEC LO |
+	// ---------------------------------------------
+
+	// Write the command word followed by the PEC word.
+	uint8_t tx [sizeof (uint16_t) * 2] = { command >> 8, command };
+	uint16_t pec = calculatePec (tx, 2);
+	tx [2] = pec >> 8;
+	tx [3] = pec;
+
+	spiSelect (chain->config->spiDriver);
+
+	if (spiExchange (chain->config->spiDriver, sizeof (tx), tx, nullBuffer) != MSG_OK)
+	{
+		spiUnselect (chain->config->spiDriver);
+		chain->state = LTC6811_CHAIN_STATE_FAILED;
+		return false;
+	}
+
+	spiUnselect (chain->config->spiDriver);
+
+	return true;
 }
 
 bool writeRegisterGroups (ltc6811DaisyChain_t* chain, uint16_t command)
@@ -373,4 +558,26 @@ bool readRegisterGroups (ltc6811DaisyChain_t* chain, uint16_t command)
 
 	// Last attempt failed, fail the whole operation.
 	return false;
+}
+
+static bool configure (ltc6811DaisyChain_t* chain)
+{
+	start (chain);
+	wakeupSleep (chain);
+
+	for (uint16_t index = 0; index < chain->config->deviceCount; ++index)
+	{
+		chain->config->devices [index].tx [0] = 0b11111000; // GPIO high impedence, ref disabled outside conversion, ADC option 0
+		chain->config->devices [index].tx [1] = 0b00000000; // VUV = 0V
+		chain->config->devices [index].tx [2] = 0b00000000; // VOV = 0V
+		chain->config->devices [index].tx [3] = 0b00000000; //
+		chain->config->devices [index].tx [4] = 0b00000000; // No discharging
+		chain->config->devices [index].tx [5] = 0b00000000; // No discharge timeout
+	}
+
+	bool result = writeRegisterGroups (chain, COMMAND_WRCFGA);
+
+	stop (chain);
+
+	return result;
 }

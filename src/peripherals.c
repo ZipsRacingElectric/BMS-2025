@@ -26,7 +26,7 @@ static const mc24lc32Config_t EEPROM_CONFIG =
 {
 	.addr			= 0x50,
 	.i2c			= &I2CD1,
-	.timeoutPeriod	= TIME_MS2I (500),
+	.timeout		= TIME_MS2I (500),
 	.magicString	= EEPROM_MAP_STRING
 };
 

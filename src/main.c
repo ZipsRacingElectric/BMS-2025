@@ -10,6 +10,7 @@
 // Includes
 #include "debug.h"
 #include "peripherals.h"
+#include "watchdog.h"
 
 // ChibiOS
 #include "hal.h"
@@ -41,7 +42,19 @@ int main (void)
 		while (true);
 	}
 
-	// Do nothing.
+	// Start the watchdog timer
+	watchdogStart ();
+
+	(void) thermistors;
+
 	while (true)
+	{
+		// Reset the watchdog
+		watchdogReset ();
+
+		ltc6811SampleCells (&ltcChain);
+		ltc6811SampleGpio (&ltcChain);
+
 		chThdSleepMilliseconds (500);
+	}
 }

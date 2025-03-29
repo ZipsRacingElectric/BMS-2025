@@ -33,6 +33,7 @@
 #define COMMAND_ADOW(ch, md, dcp, pup)	(0b01000101000 | ((md) << 7) | ((dcp) << 4) | (ch) | ((pup) << 6))
 #define COMMAND_CVST(md, st)			(0b01000000111 | ((md) << 7) | ((st) << 5))
 #define COMMAND_ADOL(md, dcp)			(0b01000000001 | ((md) << 7) | ((dcp) << 4))
+#define COMMAND_ADAX(md, chg)			(0b10001100000 | ((md) << 7) | (chg))
 
 #define COMMAND_PLADC					0b11100010100
 
@@ -80,13 +81,14 @@ static const uint16_t PEC_LUT [] =
 	0x5368, 0x96F1, 0x9DC3, 0x585A, 0x8BA7, 0x4E3E, 0x450C, 0x8095
 };
 
-/// @brief The total conversion time of the voltage ADC in each mode. Indexed by @c ltc6811AdcMode_t .
-static const systime_t ADC_TIMEOUTS_ALL_CELLS [] =
+/// @brief The total conversion time of the cell voltage ADC / GPIO ADC measuring all cells / GPIO. Indexed by
+/// @c ltc6811AdcMode_t .
+static const systime_t ADC_MODE_TIMEOUTS [] =
 {
-	TIME_US2I (12800),	// 422 Hz
-	TIME_US2I (1100),	// 27 kHz
-	TIME_US2I (2300),	// 7 kHz
-	TIME_MS2I (34)		// 26 Hz
+	TIME_US2I (12807),	// For 422 Hz mode
+	TIME_US2I (1113),	// For 27 kHz mode
+	TIME_US2I (2335),	// For 7 kHz mode
+	TIME_MS2I (202)		// For 26 Hz mode
 };
 
 // Function Prototypes --------------------------------------------------------------------------------------------------------
@@ -155,6 +157,17 @@ static bool readRegisterGroups (ltc6811DaisyChain_t* chain, uint16_t command);
  */
 static bool configure (ltc6811DaisyChain_t* chain);
 
+/**
+ * @brief Function to be called when a GPIO sampling operation fails. All GPIO will be put into the
+ * @c ANALOG_SENSOR_FAILED state.
+ * @param chain The chain to invalidate the GPIO of.
+ */
+static void failGpio (ltc6811DaisyChain_t* chain);
+
+/**
+ * @brief Acquires and starts a chain's SPI driver.
+ * @param chain The chain to start the driver of.
+ */
 static inline void start (ltc6811DaisyChain_t* chain)
 {
 	// Acquire the SPI bus (if enabled)
@@ -166,6 +179,10 @@ static inline void start (ltc6811DaisyChain_t* chain)
 	spiStart (chain->config->spiDriver, &chain->config->spiConfig);
 }
 
+/**
+ * @brief Stops and releases a chain's SPI driver.
+ * @param chain The chain to stop the driver of.
+ */
 static inline void stop (ltc6811DaisyChain_t* chain)
 {
 	// Stop the SPI driver
@@ -190,22 +207,24 @@ bool ltc6811Init (ltc6811DaisyChain_t* chain, ltc6811DaisyChainConfig_t* config)
 		return false;
 
 	// TODO(Barach): Config checks and sampling.
-	return ltc6811SampleVoltages (chain);
+	return ltc6811SampleCells (chain);
 }
 
-bool ltc6811SampleVoltages (ltc6811DaisyChain_t* chain)
+bool ltc6811SampleCells (ltc6811DaisyChain_t* chain)
 {
+	// See LTC6811 datasheet section "Measuring Cell Voltages (ADCV Command)", pg.25.
+
 	start (chain);
 	wakeupSleep (chain);
 
 	// Start the cell voltage conversion for all cells, permitting discharge.
-	if (!writeCommand (chain, COMMAND_ADCV (chain->config->cellVoltageMode, false, 0b000)))
+	if (!writeCommand (chain, COMMAND_ADCV (chain->config->cellAdcMode, true, 0b000)))
 	{
 		stop (chain);
 		return false;
 	}
 
-	if (!pollAdc (chain, ADC_TIMEOUTS_ALL_CELLS [chain->config->cellVoltageMode]))
+	if (!pollAdc (chain, ADC_MODE_TIMEOUTS [chain->config->cellAdcMode]))
 	{
 		stop (chain);
 		return false;
@@ -263,46 +282,86 @@ bool ltc6811SampleVoltages (ltc6811DaisyChain_t* chain)
 		chain->config->devices->cellVoltages [11] = WORD_TO_CELL_VOLTAGE ((chain->config->devices->rx [5] << 8) | chain->config->devices->rx [4]);
 	}
 
-	__BKPT ();
-
 	stop (chain);
 	return true;
 }
 
-void ltc6811WriteTest (ltc6811DaisyChain_t* chain)
+bool ltc6811SampleGpio (ltc6811DaisyChain_t* chain)
 {
+	// See LTC6811 datasheet section "Auxiliary (GPIO) Measurements (ADAX Command)", pg.26.
+
 	start (chain);
 	wakeupSleep (chain);
 
-	// Write a pattern to a place where it won't cause any damage.
-	for (uint16_t index = 0; index < chain->config->deviceCount; ++index)
+	// Start the ADC measurement for all GPIO.
+	if (!writeCommand (chain, COMMAND_ADAX (chain->config->gpioAdcMode, 0b000)))
 	{
-		chain->config->devices [index].tx [0] = 0x00;
-		chain->config->devices [index].tx [1] = index;									// VUV
-		chain->config->devices [index].tx [2] = chain->config->deviceCount - index - 1;	// VUV / VOV
-		chain->config->devices [index].tx [3] = 0xAB;
-		chain->config->devices [index].tx [4] = 0xCD;
-		chain->config->devices [index].tx [5] = 0x00;
+		stop (chain);
+		failGpio (chain);
+		return false;
 	}
 
-	volatile bool result = writeRegisterGroups (chain, COMMAND_WRCFGA);
-	result = result;
-	__BKPT ();
+	// Block until the ADC conversion is complete
+	if (!pollAdc (chain, ADC_MODE_TIMEOUTS [chain->config->gpioAdcMode]))
+	{
+		stop (chain);
+		failGpio (chain);
+		return false;
+	}
+
+	// Read the auxiliary register group B
+	if (!readRegisterGroups (chain, COMMAND_RDAUXB))
+	{
+		stop (chain);
+		failGpio (chain);
+		return false;
+	}
+
+	// Read GPIO 4, GPIO 5, and VREF2
+	for (uint16_t deviceIndex = 0; deviceIndex < chain->config->deviceCount; ++deviceIndex)
+	{
+		ltc6811_t* device = chain->config->devices + deviceIndex;
+
+		// Store VREF2
+		device->vref2 = device->rx [5] << 8 | device->rx [4];
+
+		for (uint8_t gpioIndex = 3; gpioIndex < LTC6811_GPIO_COUNT; ++gpioIndex)
+		{
+			analogSensor_t* sensor = chain->config->gpioAdcSensors [deviceIndex][gpioIndex];
+			if (sensor == NULL)
+				continue;
+
+			uint16_t sample = device->rx [gpioIndex * 2 - 5] << 8 | device->rx [gpioIndex * 2 - 6];
+			sensor->callback (sensor, sample);
+		}
+	}
+
+	// Read the auxiliary register group A
+	if (!readRegisterGroups (chain, COMMAND_RDAUXA))
+	{
+		stop (chain);
+		failGpio (chain);
+		return false;
+	}
+
+	// Read GPIO 1 to 3
+	for (uint16_t deviceIndex = 0; deviceIndex < chain->config->deviceCount; ++deviceIndex)
+	{
+		ltc6811_t* device = chain->config->devices + deviceIndex;
+
+		for (uint8_t gpioIndex = 0; gpioIndex < 3; ++gpioIndex)
+		{
+			analogSensor_t* sensor = chain->config->gpioAdcSensors [deviceIndex][gpioIndex];
+			if (sensor == NULL)
+				continue;
+
+			uint16_t sample = device->rx [gpioIndex * 2 + 1] << 8 | device->rx [gpioIndex * 2];
+			sensor->callback (sensor, sample);
+		}
+	}
 
 	stop (chain);
-}
-
-void ltc6811ReadTest (ltc6811DaisyChain_t* chain)
-{
-	start (chain);
-	wakeupSleep (chain);
-
-	// Read the data back and check what it reads.
-	volatile bool result = readRegisterGroups (chain, COMMAND_RDCFGA);
-	result = result;
-	__BKPT ();
-
-	stop (chain);
+	return true;
 }
 
 uint16_t calculatePec (uint8_t* data, uint8_t dataCount)
@@ -391,7 +450,7 @@ bool pollAdc (ltc6811DaisyChain_t* chain, sysinterval_t timeout)
 	return result;
 }
 
-static bool writeCommand (ltc6811DaisyChain_t* chain, uint16_t command)
+bool writeCommand (ltc6811DaisyChain_t* chain, uint16_t command)
 {
 	// Transmit Frame:
 	//  0            1            2        3
@@ -560,7 +619,7 @@ bool readRegisterGroups (ltc6811DaisyChain_t* chain, uint16_t command)
 	return false;
 }
 
-static bool configure (ltc6811DaisyChain_t* chain)
+bool configure (ltc6811DaisyChain_t* chain)
 {
 	start (chain);
 	wakeupSleep (chain);
@@ -572,7 +631,7 @@ static bool configure (ltc6811DaisyChain_t* chain)
 		chain->config->devices [index].tx [2] = 0b00000000; // VOV = 0V
 		chain->config->devices [index].tx [3] = 0b00000000; //
 		chain->config->devices [index].tx [4] = 0b00000000; // No discharging
-		chain->config->devices [index].tx [5] = 0b00000000; // No discharge timeout
+		chain->config->devices [index].tx [5] = 0b00001000; // No discharge timeout
 	}
 
 	bool result = writeRegisterGroups (chain, COMMAND_WRCFGA);
@@ -580,4 +639,17 @@ static bool configure (ltc6811DaisyChain_t* chain)
 	stop (chain);
 
 	return result;
+}
+
+void failGpio (ltc6811DaisyChain_t* chain)
+{
+	for (uint16_t deviceIndex = 0; deviceIndex < chain->config->deviceCount; ++deviceIndex)
+	{
+		for (uint16_t gpioIndex = 0; gpioIndex < LTC6811_GPIO_COUNT; ++gpioIndex)
+		{
+			analogSensor_t* sensor = chain->config->gpioAdcSensors [deviceIndex][gpioIndex];
+			if (sensor != NULL)
+				sensor->state = ANALOG_SENSOR_FAILED;
+		}
+	}
 }

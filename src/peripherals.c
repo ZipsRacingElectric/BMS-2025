@@ -6,10 +6,10 @@
 mc24lc32_t		eeprom;
 eepromMap_t*	eepromMap;
 
-#define LTC_COUNT 1
 ltc6811_t ltcs [LTC_COUNT];
-
 ltc6811DaisyChain_t ltcChain;
+
+linearSensor_t thermistors [LTC_COUNT][LTC6811_GPIO_COUNT];
 
 // Configuration --------------------------------------------------------------------------------------------------------------
 
@@ -30,6 +30,7 @@ static const mc24lc32Config_t EEPROM_CONFIG =
 	.magicString	= EEPROM_MAP_STRING
 };
 
+// TODO(Barach): Baudrate should be higher
 /// @brief Configuration for the LTC daisy chain.
 ltc6811DaisyChainConfig_t ltcChainConfig =
 {
@@ -50,7 +51,26 @@ ltc6811DaisyChainConfig_t ltcChainConfig =
 	.devices			= ltcs,
 	.deviceCount		= LTC_COUNT,
 	.readAttemptCount	= 5,
-	.cellVoltageMode	= LTC6811_ADC_26HZ
+	.cellAdcMode		= LTC6811_ADC_422HZ, // TODO(Barach): Should be 26Hz
+	.gpioAdcMode		= LTC6811_ADC_26HZ,
+	.gpioAdcSensors		=
+	{
+		{
+			(analogSensor_t*) &thermistors [0][0],
+			(analogSensor_t*) &thermistors [0][1],
+			(analogSensor_t*) &thermistors [0][2],
+			(analogSensor_t*) &thermistors [0][3],
+			(analogSensor_t*) &thermistors [0][4],
+		}
+	}
+};
+
+static const linearSensorConfig_t THERMISTOR_CONFIG =
+{
+	.sampleMin	= 0,
+	.sampleMax	= 65535,
+	.valueMin	= 0,
+	.valueMax	= 6.5536f
 };
 
 // Functions ------------------------------------------------------------------------------------------------------------------
@@ -66,16 +86,21 @@ bool peripheralsInit (void)
 		return false;
 	eepromMap = (eepromMap_t*) eeprom.cache;
 
+	// Reconfigurable peripheral initializations. Note this must occur before the LTC initialization as the LTCs are dependent
+	// on the thermistor peripherals.
+	peripheralsReconfigure ();
+
 	// LTC daisy chain initialization
 	if (!ltc6811Init (&ltcChain, &ltcChainConfig))
 		return false;
 
-	// Re-configurable peripherals are not considered fatal.
-	peripheralsReconfigure ();
 	return true;
 }
 
 void peripheralsReconfigure (void)
 {
-	// TODO(Barach): Nothing to put here yet.
+	// Thermistor initialization
+	for (uint16_t deviceIndex = 0; deviceIndex < LTC_COUNT; ++deviceIndex)
+		for (uint16_t gpioIndex = 0; gpioIndex < LTC6811_GPIO_COUNT; ++gpioIndex)
+			linearSensorInit (&thermistors [deviceIndex][gpioIndex], &THERMISTOR_CONFIG);
 }

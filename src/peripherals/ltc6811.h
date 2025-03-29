@@ -10,8 +10,13 @@
 //
 // Note: This code is derivative of the Analog Devices Linduino codebase:
 //   https://github.com/analogdevicesinc/Linduino/tree/master.
+//
+// TODO(Barach): Combined GPIO and cell voltage command exists.
 
 // Includes -------------------------------------------------------------------------------------------------------------------
+
+// Includes
+#include "peripherals/analog_sensor.h"
 
 // ChibiOS
 #include "hal.h"
@@ -19,6 +24,7 @@
 // Constants ------------------------------------------------------------------------------------------------------------------
 
 #define LTC6811_CELL_COUNT		12
+#define LTC6811_GPIO_COUNT		5
 #define LTC6811_BUFFER_SIZE		8
 
 // Datatypes ------------------------------------------------------------------------------------------------------------------
@@ -50,6 +56,7 @@ typedef struct
 	float cellVoltages [LTC6811_CELL_COUNT];
 	uint8_t tx [LTC6811_BUFFER_SIZE];
 	uint8_t rx [LTC6811_BUFFER_SIZE];
+	uint16_t vref2;
 } ltc6811_t;
 
 typedef struct
@@ -63,7 +70,7 @@ typedef struct
 	/// @brief The MISO line of the SPI bus.
 	ioline_t spiMiso;
 
-	/// @brief The array of @c ltc6811_t devices forming the daisy chain.
+	/// @brief The array of @c ltc6811_t devices forming the daisy chain. No need to initialize the elements.
 	ltc6811_t* devices;
 
 	/// @brief The number of devices in the daisy chain, size of @c devices .
@@ -72,7 +79,15 @@ typedef struct
 	/// @brief The number of times to attempt a read operation before failing.
 	uint16_t readAttemptCount;
 
-	ltc6811AdcMode_t cellVoltageMode;
+	/// @brief The ADC conversion mode to use for measuring the cell voltages.
+	ltc6811AdcMode_t cellAdcMode;
+
+	/// @brief The ADC conversion mode to use for measuring the GPIO voltages.
+	ltc6811AdcMode_t gpioAdcMode;
+
+	/// @brief Multidimensional array of analog sensors to call upon sampling each device's GPIO. Must be size
+	/// [ @c deviceCount ][ @c LTC6811_GPIO_COUNT ].
+	analogSensor_t* gpioAdcSensors [][LTC6811_GPIO_COUNT];
 } ltc6811DaisyChainConfig_t;
 
 typedef struct
@@ -85,10 +100,8 @@ typedef struct
 
 bool ltc6811Init (ltc6811DaisyChain_t* chain, ltc6811DaisyChainConfig_t* config);
 
-bool ltc6811SampleVoltages (ltc6811DaisyChain_t* chain);
+bool ltc6811SampleCells (ltc6811DaisyChain_t* chain);
 
-void ltc6811WriteTest (ltc6811DaisyChain_t* chain);
-
-void ltc6811ReadTest (ltc6811DaisyChain_t* chain);
+bool ltc6811SampleGpio (ltc6811DaisyChain_t* chain);
 
 #endif // LTC6811_H

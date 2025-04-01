@@ -1,5 +1,5 @@
 // Header
-#include "can.h"
+#include "can_vehicle.h"
 
 // TODO(Barach): Temporary
 #include "watchdog.h"
@@ -15,15 +15,15 @@ canNode_t* nodes [0];
 
 // Function Prototypes --------------------------------------------------------------------------------------------------------
 
-int8_t canRxHandler (void* arg, CANRxFrame* frame);
+static int8_t canRxHandler (void* arg, CANRxFrame* frame);
 
 // Configuration --------------------------------------------------------------------------------------------------------------
 
 /**
- * @brief Configuration of the CAN 1 peripheral.
+ * @brief Configuration of the CAN 1 peripheral for while in the vehicle.
  * @note See section 32.9 of the STM32F405 Reference Manual for more details.
  */
-static const CANConfig CAN1_CONFIG =
+static const CANConfig CAN_VEHICLE_CONFIG =
 {
 	.mcr = 	CAN_MCR_ABOM |		// Automatic bus-off management.
 			CAN_MCR_AWUM |		// Automatic wakeup mode.
@@ -46,10 +46,10 @@ static const canThreadConfig_t CAN1_THREAD_CONFIG =
 
 // Functions ------------------------------------------------------------------------------------------------------------------
 
-bool canThreadInit (tprio_t priority)
+bool canChargerInit (tprio_t priority)
 {
 	// CAN 1 driver initialization
-	if (canStart (&CAND1, &CAN1_CONFIG) != MSG_OK)
+	if (canStart (&CAND1, &CAN_VEHICLE_CONFIG) != MSG_OK)
 		return false;
 
 	// Leave standby mode

@@ -20,7 +20,8 @@ CSRC =	$(ALLCSRC)					\
 		src/peripherals.c			\
 		src/peripherals/ltc6811.c	\
 									\
-		src/can.c					\
+		src/can_charger.c			\
+		src/can_vehicle.c			\
 									\
 		src/watchdog.c
 

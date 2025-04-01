@@ -8,7 +8,8 @@
 // Includes -------------------------------------------------------------------------------------------------------------------
 
 // Includes
-#include "can.h"
+#include "can_charger.h"
+#include "can_vehicle.h"
 #include "debug.h"
 #include "peripherals.h"
 #include "watchdog.h"
@@ -22,6 +23,8 @@ void hardFaultCallback (void)
 {
 	// TODO(Barach):
 	// Fault handler implementation
+
+	palWriteLine (LINE_SHUTDOWN_STATUS, false);
 }
 
 // Entrypoint -----------------------------------------------------------------------------------------------------------------
@@ -46,8 +49,12 @@ int main (void)
 	// Start the watchdog timer
 	watchdogStart ();
 
-	// Start the CAN thread
-	canThreadInit (NORMALPRIO);
+	// Start the appropriate CAN interface. If in the vehicle, use the vehicle interface, otherwise, use the charger interface.
+	if (palReadLine (LINE_CHARGER_DETECT))
+		canVehicleInit (NORMALPRIO);
+	else
+		canChargerInit (NORMALPRIO);
+
 
 	(void) thermistors;
 

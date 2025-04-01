@@ -100,6 +100,7 @@ bool peripheralsInit (void)
 void peripheralsReconfigure (void)
 {
 	// Thermistor initialization
+	// TODO(Barach): const discard
 	for (uint16_t deviceIndex = 0; deviceIndex < LTC_COUNT; ++deviceIndex)
 		for (uint16_t gpioIndex = 0; gpioIndex < LTC6811_GPIO_COUNT; ++gpioIndex)
 			linearSensorInit (&thermistors [deviceIndex][gpioIndex], &THERMISTOR_CONFIG);

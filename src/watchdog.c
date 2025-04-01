@@ -21,7 +21,10 @@ void watchdogStart ()
 {
 	// If the device was just reset due to the watchdog, enter the fault state.
 	if ((RCC->CSR & RCC_CSR_IWDGRSTF) == RCC_CSR_IWDGRSTF)
+	{
 		hardFaultCallback ();
+		while (true);
+	}
 
 	wdgStart (&WDGD1, &WDG1_CONFIG);
 }

@@ -20,11 +20,15 @@ CSRC =	$(ALLCSRC)					\
 		src/peripherals.c			\
 		src/peripherals/ltc6811.c	\
 									\
+		src/can.c					\
+									\
 		src/watchdog.c
 
 # Common library includes
 include common/src/debug.mk
 include common/src/fault_handler.mk
+
+include common/src/can/can_thread.mk
 
 include common/src/peripherals/analog_linear.mk
 include common/src/peripherals/mc24lc32.mk

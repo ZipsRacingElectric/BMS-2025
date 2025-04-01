@@ -8,6 +8,7 @@
 // Includes -------------------------------------------------------------------------------------------------------------------
 
 // Includes
+#include "can.h"
 #include "debug.h"
 #include "peripherals.h"
 #include "watchdog.h"
@@ -44,6 +45,9 @@ int main (void)
 
 	// Start the watchdog timer
 	watchdogStart ();
+
+	// Start the CAN thread
+	canThreadInit (NORMALPRIO);
 
 	(void) thermistors;
 

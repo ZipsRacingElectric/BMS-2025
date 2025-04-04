@@ -9,7 +9,7 @@ eepromMap_t*	eepromMap;
 ltc6811_t ltcs [LTC_COUNT];
 ltc6811DaisyChain_t ltcChain;
 
-linearSensor_t thermistors [LTC_COUNT][LTC6811_GPIO_COUNT];
+thermistorPulldown_t thermistors [LTC_COUNT][LTC6811_GPIO_COUNT];
 
 // Configuration --------------------------------------------------------------------------------------------------------------
 
@@ -65,12 +65,17 @@ ltc6811DaisyChainConfig_t ltcChainConfig =
 	}
 };
 
-static const linearSensorConfig_t THERMISTOR_CONFIG =
+static const thermistorPulldownConfig_t THERMISTOR_CONFIG =
 {
-	.sampleMin	= 0,
-	.sampleMax	= 65535,
-	.valueMin	= 0,
-	.valueMax	= 6.5536f
+	.steinhartHartA			= 0,
+	.steinhartHartB			= 0,
+	.steinhartHartC			= 0,
+	.steinhartHartD			= 0,
+	.resistanceReference	= 10,
+	.resistancePullup		= 10000,
+	.sampleVdd				= 5000,
+	.temperatureMin			= -10,
+	.temperatureMax			= 100
 };
 
 // Functions ------------------------------------------------------------------------------------------------------------------
@@ -103,5 +108,5 @@ void peripheralsReconfigure (void)
 	// TODO(Barach): const discard
 	for (uint16_t deviceIndex = 0; deviceIndex < LTC_COUNT; ++deviceIndex)
 		for (uint16_t gpioIndex = 0; gpioIndex < LTC6811_GPIO_COUNT; ++gpioIndex)
-			linearSensorInit (&thermistors [deviceIndex][gpioIndex], &THERMISTOR_CONFIG);
+			thermistorPulldownInit (&thermistors [deviceIndex][gpioIndex], &THERMISTOR_CONFIG);
 }

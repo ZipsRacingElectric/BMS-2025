@@ -11,10 +11,10 @@
 // Includes -------------------------------------------------------------------------------------------------------------------
 
 // Includes
-#include "peripherals/analog_linear.h"
 #include "peripherals/eeprom_map.h"
 #include "peripherals/ltc6811.h"
 #include "peripherals/mc24lc32.h"
+#include "peripherals/thermistor_pulldown.h"
 
 // Constants ------------------------------------------------------------------------------------------------------------------
 
@@ -33,7 +33,7 @@ extern eepromMap_t* eepromMap;
 extern ltc6811_t ltcs [LTC_COUNT];
 extern ltc6811DaisyChain_t ltcChain;
 
-extern linearSensor_t thermistors [LTC_COUNT][LTC6811_GPIO_COUNT];
+extern thermistorPulldown_t thermistors [LTC_COUNT][LTC6811_GPIO_COUNT];
 
 // Functions ------------------------------------------------------------------------------------------------------------------
 

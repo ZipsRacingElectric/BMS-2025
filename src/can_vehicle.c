@@ -73,6 +73,10 @@ bool canInterfaceInit (tprio_t priority)
 
 void can1TxThread (void* arg)
 {
+	(void) arg;
+
+	chRegSetThreadName ("can_1_tx");
+
 	while (true)
 	{
 		for (uint16_t index = 0; index < CELL_MESSAGE_COUNT; ++index)

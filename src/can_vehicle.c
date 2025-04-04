@@ -1,12 +1,14 @@
 // Header
 #include "can_vehicle.h"
 
-// TODO(Barach): Temporary
-#include "watchdog.h"
+#include "can/transmit.h"
+#include "can/receive.h"
 
 // Threads --------------------------------------------------------------------------------------------------------------------
 
-static CAN_THREAD_WORKING_AREA (can1ThreadWa);
+static CAN_THREAD_WORKING_AREA (can1RxThreadWa);
+
+static THD_WORKING_AREA (can1TxThreadWa, 512);
 
 // Global Nodes ---------------------------------------------------------------------------------------------------------------
 
@@ -15,9 +17,11 @@ static canNode_t* nodes [0];
 
 // Function Prototypes --------------------------------------------------------------------------------------------------------
 
-static int8_t canRxHandler (void* arg, CANRxFrame* frame);
+static void can1TxThread (void* arg);
 
 // Configuration --------------------------------------------------------------------------------------------------------------
+
+#define TX_THREAD_PERIOD TIME_MS2I(1000)
 
 /**
  * @brief Configuration of the CAN 1 peripheral.
@@ -34,19 +38,19 @@ static const CANConfig CAN1_CONFIG =
 			CAN_BTR_BRP (2)		// Baudrate divisor of 3 (1 Mbps)
 };
 
-static const canThreadConfig_t CAN1_THREAD_CONFIG =
+static const canThreadConfig_t CAN1_RX_THREAD_CONFIG =
 {
 	.name		= "can_1_rx",
 	.driver		= &CAND1,
-	.period		= TIME_MS2I (1),
+	.period		= TIME_MS2I (10),
 	.nodes		= nodes,
 	.nodeCount	= NODE_COUNT,
-	.rxHandler	= &canRxHandler
+	.rxHandler	= &can1RxHandler
 };
 
 // Functions ------------------------------------------------------------------------------------------------------------------
 
-bool canVehicleInit (tprio_t priority)
+bool canInterfaceInit (tprio_t priority)
 {
 	// CAN 1 driver initialization
 	if (canStart (&CAND1, &CAN1_CONFIG) != MSG_OK)
@@ -58,21 +62,22 @@ bool canVehicleInit (tprio_t priority)
 	// Initialize the CAN nodes
 	// TODO(Barach): Nodes.
 
-	// Create the CAN Thread
-	canThreadStart (can1ThreadWa, sizeof (can1ThreadWa), priority, &CAN1_THREAD_CONFIG);
+	// Create the CAN RX thread
+	canThreadStart (can1RxThreadWa, sizeof (can1RxThreadWa), priority, &CAN1_RX_THREAD_CONFIG);
+
+	// Create the CAN TX thread
+	chThdCreateStatic (can1TxThreadWa, sizeof (can1TxThreadWa), priority, can1TxThread, NULL);
+
 	return true;
 }
 
-int8_t canRxHandler (void* arg, CANRxFrame* frame)
+void can1TxThread (void* arg)
 {
-	// First argument is config
-	const canThreadConfig_t* config = (canThreadConfig_t*) arg;
+	while (true)
+	{
+		for (uint16_t index = 0; index < CELL_MESSAGE_COUNT; ++index)
+			transmitCellMessage (&CAND1, TX_THREAD_PERIOD, index);
 
-	(void) config;
-
-	// TODO(Barach): Move to write-only command
-	if (frame->SID == 0x752)
-		watchdogTrigger ();
-
-	return 0;
+		chThdSleepMilliseconds (TX_THREAD_PERIOD);
+	}
 }

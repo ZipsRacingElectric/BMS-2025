@@ -8,7 +8,6 @@
 // Includes -------------------------------------------------------------------------------------------------------------------
 
 // Includes
-#include "can_charger.h"
 #include "can_vehicle.h"
 #include "debug.h"
 #include "peripherals.h"
@@ -40,7 +39,26 @@ int main (void)
 	debugHeartbeatStart (&ledLine, LOWPRIO);
 
 	// Peripheral Initialization
-	if (!peripheralsInit ())
+	// if (!peripheralsInit ())
+	// {
+	// 	hardFaultCallback ();
+	// 	while (true);
+	// }
+
+	ltcs [0].cellVoltages [0] = 0.0f;
+	ltcs [0].cellVoltages [1] = 0.1f;
+	ltcs [0].cellVoltages [2] = 0.2f;
+	ltcs [0].cellVoltages [3] = 0.3f;
+	ltcs [0].cellVoltages [4] = 0.4f;
+	ltcs [0].cellVoltages [5] = 0.5f;
+	ltcs [0].cellVoltages [6] = 0.6f;
+	ltcs [0].cellVoltages [7] = 0.7f;
+	ltcs [0].cellVoltages [8] = 0.8f;
+	ltcs [0].cellVoltages [9] = 0.9f;
+	ltcs [0].cellVoltages [10] = 1.0f;
+	ltcs [0].cellVoltages [11] = 1.1f;
+
+	if (!canInterfaceInit (NORMALPRIO))
 	{
 		hardFaultCallback ();
 		while (true);
@@ -49,13 +67,6 @@ int main (void)
 	// Start the watchdog timer
 	watchdogStart ();
 
-	// Start the appropriate CAN interface. If in the vehicle, use the vehicle interface, otherwise, use the charger interface.
-	if (palReadLine (LINE_CHARGER_DETECT))
-		canVehicleInit (NORMALPRIO);
-	else
-		canChargerInit (NORMALPRIO);
-
-
 	(void) thermistors;
 
 	while (true)
@@ -63,8 +74,8 @@ int main (void)
 		// Reset the watchdog
 		watchdogReset ();
 
-		ltc6811SampleCells (&ltcChain);
-		ltc6811SampleGpio (&ltcChain);
+		// ltc6811SampleCells (&ltcChain);
+		// ltc6811SampleGpio (&ltcChain);
 
 		chThdSleepMilliseconds (500);
 	}

@@ -16,6 +16,12 @@
 #include "peripherals/ltc6811.h"
 #include "peripherals/mc24lc32.h"
 
+// Constants ------------------------------------------------------------------------------------------------------------------
+
+#define LTC_COUNT 1
+#define CELL_COUNT (LTC_COUNT * LTC6811_CELL_COUNT)
+#define TEMP_COUNT (LTC_COUNT * LTC6811_GPIO_COUNT)
+
 // Global Peripherals ---------------------------------------------------------------------------------------------------------
 
 /// @brief The BMS's EEPROM. This is responsible for storing all non-volatile variables.
@@ -24,7 +30,6 @@ extern mc24lc32_t eeprom;
 /// @brief Structure mapping the EEPROM's contents to C datatypes.
 extern eepromMap_t* eepromMap;
 
-#define LTC_COUNT 1
 extern ltc6811_t ltcs [LTC_COUNT];
 extern ltc6811DaisyChain_t ltcChain;
 

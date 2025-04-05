@@ -40,8 +40,18 @@ typedef enum
 
 typedef enum
 {
-	LTC6811_STATE_PEC_ERROR	= 0,
-	LTC6811_STATE_READY		= 1
+	/// @brief Indicates a packet with an incorrect PEC was received. All other information about the device is void.
+	LTC6811_STATE_PEC_ERROR = 0,
+
+	/// @brief Indicates one or more cell voltages are not valid. Check @c overvoltageFaults , @c undervoltageFaults ,
+	/// and @c openWireFaults for more details.
+	LTC6811_STATE_CELL_FAULT = 1,
+
+	/// @brief Indicates the device's multiplexor self test failed. All ADC measurements are void.
+	LTC6811_STATE_SELF_TEST_FAULT = 2,
+
+	/// @brief Indicates the device is operating normally.
+	LTC6811_STATE_READY = 3
 } ltc6811State_t;
 
 typedef enum
@@ -53,9 +63,19 @@ typedef enum
 typedef struct
 {
 	ltc6811State_t state;
+
 	float cellVoltages [LTC6811_CELL_COUNT];
+	float cellVoltagesPullup [LTC6811_CELL_COUNT];
+	float cellVoltagesPulldown [LTC6811_CELL_COUNT];
+	float cellVoltagesDelta [LTC6811_CELL_COUNT];
+
+	bool overvoltageFaults [LTC6811_CELL_COUNT];
+	bool undervoltageFaults [LTC6811_CELL_COUNT];
+	bool openWireFaults [LTC6811_CELL_COUNT + 1];
+
 	uint8_t tx [LTC6811_BUFFER_SIZE];
 	uint8_t rx [LTC6811_BUFFER_SIZE];
+
 	uint16_t vref2;
 } ltc6811_t;
 
@@ -85,6 +105,16 @@ typedef struct
 	/// @brief The ADC conversion mode to use for measuring the GPIO voltages.
 	ltc6811AdcMode_t gpioAdcMode;
 
+	/// @brief The number of pull-up / pull-down command iterations to perform during the open wire test. This value should be
+	/// determined through testing, but cannot be less than 2.
+	uint8_t openWireTestIterations;
+
+	/// @brief The minimum plausible cell voltage measurement, any lower indicates a fault condition.
+	float cellVoltageMin;
+
+	/// @brief The maximum plausible cell voltage measurement, any higher indicates a fault condition.
+	float cellVoltageMax;
+
 	/// @brief Multidimensional array of analog sensors to call upon sampling each device's GPIO. Must be size
 	/// [ @c deviceCount ][ @c LTC6811_GPIO_COUNT ].
 	analogSensor_t* gpioAdcSensors [][LTC6811_GPIO_COUNT];
@@ -103,5 +133,7 @@ bool ltc6811Init (ltc6811DaisyChain_t* chain, ltc6811DaisyChainConfig_t* config)
 bool ltc6811SampleCells (ltc6811DaisyChain_t* chain);
 
 bool ltc6811SampleGpio (ltc6811DaisyChain_t* chain);
+
+bool ltc6811OpenWireTest (ltc6811DaisyChain_t* chain);
 
 #endif // LTC6811_H

@@ -91,6 +91,13 @@ static const systime_t ADC_MODE_TIMEOUTS [] =
 	TIME_MS2I (202)		// For 26 Hz mode
 };
 
+typedef enum
+{
+	CELL_VOLTAGE_DESTINATION_VOLTAGE_BUFFER = 0,
+	CELL_VOLTAGE_DESTINATION_PULLUP_BUFFER = 1,
+	CELL_VOLTAGE_DESTINATION_PULLDOWN_BUFFER = 2
+} cellVoltageDestination_t;
+
 // Function Prototypes --------------------------------------------------------------------------------------------------------
 
 /**
@@ -158,6 +165,14 @@ static bool readRegisterGroups (ltc6811DaisyChain_t* chain, uint16_t command);
 static bool configure (ltc6811DaisyChain_t* chain);
 
 /**
+ * @brief Samples the cell voltages of each device in a chain.
+ * @param chain The chain to sample from.
+ * @param destination The destination buffer to use for each device.
+ * @return True if successful, false otherwise.
+ */
+static bool sampleCells (ltc6811DaisyChain_t* chain, cellVoltageDestination_t destination);
+
+/**
  * @brief Function to be called when a GPIO sampling operation fails. All GPIO will be put into the
  * @c ANALOG_SENSOR_FAILED state.
  * @param chain The chain to invalidate the GPIO of.
@@ -212,77 +227,27 @@ bool ltc6811Init (ltc6811DaisyChain_t* chain, ltc6811DaisyChainConfig_t* config)
 
 bool ltc6811SampleCells (ltc6811DaisyChain_t* chain)
 {
-	// See LTC6811 datasheet section "Measuring Cell Voltages (ADCV Command)", pg.25.
-
-	start (chain);
-	wakeupSleep (chain);
-
-	// Start the cell voltage conversion for all cells, permitting discharge.
-	if (!writeCommand (chain, COMMAND_ADCV (chain->config->cellAdcMode, true, 0b000)))
-	{
-		stop (chain);
+	if (sampleCells (chain, CELL_VOLTAGE_DESTINATION_VOLTAGE_BUFFER))
 		return false;
-	}
 
-	if (!pollAdc (chain, ADC_MODE_TIMEOUTS [chain->config->cellAdcMode]))
+	for (ltc6811_t* device = chain->config->devices; device < chain->config->devices + chain->config->deviceCount; ++device)
 	{
-		stop (chain);
-		return false;
+		for (uint16_t cellIndex = 0; cellIndex < LTC6811_CELL_COUNT; ++cellIndex)
+		{
+			if (device->cellVoltages [cellIndex] < chain->config->cellVoltageMin)
+			{
+				device->undervoltageFaults [cellIndex] = true;
+				device->state = LTC6811_STATE_CELL_FAULT;
+			}
+
+			if (device->cellVoltages [cellIndex] > chain->config->cellVoltageMax)
+			{
+				device->overvoltageFaults [cellIndex] = true;
+				device->state = LTC6811_STATE_CELL_FAULT;
+			}
+		}
 	}
 
-	if (!readRegisterGroups (chain, COMMAND_RDCVA))
-	{
-		stop (chain);
-		return false;
-	}
-
-	for (uint16_t index = 0; index < chain->config->deviceCount; ++index)
-	{
-		chain->config->devices->cellVoltages [0] = WORD_TO_CELL_VOLTAGE ((chain->config->devices->rx [1] << 8) | chain->config->devices->rx [0]);
-		chain->config->devices->cellVoltages [1] = WORD_TO_CELL_VOLTAGE ((chain->config->devices->rx [3] << 8) | chain->config->devices->rx [2]);
-		chain->config->devices->cellVoltages [2] = WORD_TO_CELL_VOLTAGE ((chain->config->devices->rx [5] << 8) | chain->config->devices->rx [4]);
-	}
-
-	if (!readRegisterGroups (chain, COMMAND_RDCVB))
-	{
-		stop (chain);
-		return false;
-	}
-
-	for (uint16_t index = 0; index < chain->config->deviceCount; ++index)
-	{
-		chain->config->devices->cellVoltages [3] = WORD_TO_CELL_VOLTAGE ((chain->config->devices->rx [1] << 8) | chain->config->devices->rx [0]);
-		chain->config->devices->cellVoltages [4] = WORD_TO_CELL_VOLTAGE ((chain->config->devices->rx [3] << 8) | chain->config->devices->rx [2]);
-		chain->config->devices->cellVoltages [5] = WORD_TO_CELL_VOLTAGE ((chain->config->devices->rx [5] << 8) | chain->config->devices->rx [4]);
-	}
-
-	if (!readRegisterGroups (chain, COMMAND_RDCVC))
-	{
-		stop (chain);
-		return false;
-	}
-
-	for (uint16_t index = 0; index < chain->config->deviceCount; ++index)
-	{
-		chain->config->devices->cellVoltages [6] = WORD_TO_CELL_VOLTAGE ((chain->config->devices->rx [1] << 8) | chain->config->devices->rx [0]);
-		chain->config->devices->cellVoltages [7] = WORD_TO_CELL_VOLTAGE ((chain->config->devices->rx [3] << 8) | chain->config->devices->rx [2]);
-		chain->config->devices->cellVoltages [8] = WORD_TO_CELL_VOLTAGE ((chain->config->devices->rx [5] << 8) | chain->config->devices->rx [4]);
-	}
-
-	if (!readRegisterGroups (chain, COMMAND_RDCVD))
-	{
-		stop (chain);
-		return false;
-	}
-
-	for (uint16_t index = 0; index < chain->config->deviceCount; ++index)
-	{
-		chain->config->devices->cellVoltages [9] = WORD_TO_CELL_VOLTAGE ((chain->config->devices->rx [1] << 8) | chain->config->devices->rx [0]);
-		chain->config->devices->cellVoltages [10] = WORD_TO_CELL_VOLTAGE ((chain->config->devices->rx [3] << 8) | chain->config->devices->rx [2]);
-		chain->config->devices->cellVoltages [11] = WORD_TO_CELL_VOLTAGE ((chain->config->devices->rx [5] << 8) | chain->config->devices->rx [4]);
-	}
-
-	stop (chain);
 	return true;
 }
 
@@ -362,6 +327,68 @@ bool ltc6811SampleGpio (ltc6811DaisyChain_t* chain)
 
 	stop (chain);
 	return true;
+}
+
+bool ltc6811OpenWireTest (ltc6811DaisyChain_t* chain)
+{
+	// See LTC6811 datasheet section "Open Wire Check (ADOW Command)", pg.34.
+
+	start (chain);
+	wakeupSleep (chain);
+
+	// Pull-up measurement
+	for (uint8_t index = 0; index < chain->config->openWireTestIterations; ++index)
+	{
+		// Send the pull-up command.
+		if (!writeCommand (chain, COMMAND_ADOW (0b000, chain->config->cellAdcMode, true, true)))
+		{
+			stop (chain);
+			return false;
+		}
+
+		// Block until complete.
+		pollAdc (chain, ADC_MODE_TIMEOUTS [chain->config->cellAdcMode]);
+	}
+
+	// Sample the cell voltages into the pull-up buffer.
+	sampleCells (chain, CELL_VOLTAGE_DESTINATION_PULLUP_BUFFER);
+
+	// Pull-down measurement
+	for (uint8_t index = 0; index < chain->config->openWireTestIterations; ++index)
+	{
+		// Send the pull-down command.
+		if (!writeCommand (chain, COMMAND_ADOW (0b000, chain->config->cellAdcMode, true, false)))
+		{
+			stop (chain);
+			return false;
+		}
+
+		// Block until complete.
+		pollAdc (chain, ADC_MODE_TIMEOUTS [chain->config->cellAdcMode]);
+	}
+
+	// Sample the cell voltages into the pull-down buffer.
+	sampleCells (chain, CELL_VOLTAGE_DESTINATION_PULLDOWN_BUFFER);
+
+	// Check each device, cell-by-cell
+	// Note that in the datasheet, sense wires are indexed 0 to 12 while cells are indexed 1 to 12.
+	for (ltc6811_t* device = chain->config->devices; device < chain->config->devices + chain->config->deviceCount; ++device)
+	{
+		// For wire 0, if cell 1 read 0V (1mV tolerance for noise) during pull-up, the wire is open.
+		device->openWireFaults [0] = device->cellVoltagesPullup [0] < 0.001f && device->cellVoltagesPullup [0] > -0.001f;
+
+		// For wire n in [1 to 11], if cell delta (n+1) < -400mV, the wire is open.
+		for (uint8_t wireIndex = 1; wireIndex < LTC6811_CELL_COUNT; ++wireIndex)
+			device->openWireFaults [wireIndex] = device->cellVoltagesDelta [wireIndex] < -0.4f;
+
+		// For wire 12, if cell 12 read 0V (1mV tolerance for noise) during pull-down, the wire is open.
+		device->openWireFaults [12] = device->cellVoltagesPulldown [11] < 0.001f && device->cellVoltagesPulldown [11] > -0.001f;
+
+		// Update the device's overall state.
+		for (uint8_t wireIndex = 0; wireIndex < LTC6811_CELL_COUNT + 1; ++wireIndex)
+			if (device->openWireFaults [wireIndex])
+				device->state = LTC6811_STATE_CELL_FAULT;
+	}
 }
 
 uint16_t calculatePec (uint8_t* data, uint8_t dataCount)
@@ -639,6 +666,158 @@ bool configure (ltc6811DaisyChain_t* chain)
 	stop (chain);
 
 	return result;
+}
+
+bool sampleCells (ltc6811DaisyChain_t* chain, cellVoltageDestination_t destination)
+{
+	// See LTC6811 datasheet section "Measuring Cell Voltages (ADCV Command)", pg.25.
+
+	start (chain);
+	wakeupSleep (chain);
+
+	// Start the cell voltage conversion for all cells, permitting discharge.
+	if (!writeCommand (chain, COMMAND_ADCV (chain->config->cellAdcMode, true, 0b000)))
+	{
+		stop (chain);
+		return false;
+	}
+
+	if (!pollAdc (chain, ADC_MODE_TIMEOUTS [chain->config->cellAdcMode]))
+	{
+		stop (chain);
+		return false;
+	}
+
+	if (!readRegisterGroups (chain, COMMAND_RDCVA))
+	{
+		stop (chain);
+		return false;
+	}
+
+	for (uint16_t index = 0; index < chain->config->deviceCount; ++index)
+	{
+		float cell0 = WORD_TO_CELL_VOLTAGE ((chain->config->devices->rx [1] << 8) | chain->config->devices->rx [0]);
+		float cell1 = WORD_TO_CELL_VOLTAGE ((chain->config->devices->rx [3] << 8) | chain->config->devices->rx [2]);
+		float cell2 = WORD_TO_CELL_VOLTAGE ((chain->config->devices->rx [5] << 8) | chain->config->devices->rx [4]);
+
+		switch (destination)
+		{
+		case CELL_VOLTAGE_DESTINATION_VOLTAGE_BUFFER:
+			chain->config->devices->cellVoltages [0] = cell0;
+			chain->config->devices->cellVoltages [1] = cell1;
+			chain->config->devices->cellVoltages [2] = cell2;
+			break;
+		case CELL_VOLTAGE_DESTINATION_PULLUP_BUFFER:
+			chain->config->devices->cellVoltagesPullup [0] = cell0;
+			chain->config->devices->cellVoltagesPullup [1] = cell1;
+			chain->config->devices->cellVoltagesPullup [2] = cell2;
+			break;
+		case CELL_VOLTAGE_DESTINATION_PULLDOWN_BUFFER:
+			chain->config->devices->cellVoltagesPulldown [0] = cell0;
+			chain->config->devices->cellVoltagesPulldown [1] = cell1;
+			chain->config->devices->cellVoltagesPulldown [2] = cell2;
+			break;
+		}
+	}
+
+	if (!readRegisterGroups (chain, COMMAND_RDCVB))
+	{
+		stop (chain);
+		return false;
+	}
+
+	for (uint16_t index = 0; index < chain->config->deviceCount; ++index)
+	{
+		float cell3 = WORD_TO_CELL_VOLTAGE ((chain->config->devices->rx [1] << 8) | chain->config->devices->rx [0]);
+		float cell4 = WORD_TO_CELL_VOLTAGE ((chain->config->devices->rx [3] << 8) | chain->config->devices->rx [2]);
+		float cell5 = WORD_TO_CELL_VOLTAGE ((chain->config->devices->rx [5] << 8) | chain->config->devices->rx [4]);
+
+		switch (destination)
+		{
+		case CELL_VOLTAGE_DESTINATION_VOLTAGE_BUFFER:
+			chain->config->devices->cellVoltages [3] = cell3;
+			chain->config->devices->cellVoltages [4] = cell4;
+			chain->config->devices->cellVoltages [5] = cell5;
+			break;
+		case CELL_VOLTAGE_DESTINATION_PULLUP_BUFFER:
+			chain->config->devices->cellVoltagesPullup [3] = cell3;
+			chain->config->devices->cellVoltagesPullup [4] = cell4;
+			chain->config->devices->cellVoltagesPullup [5] = cell5;
+			break;
+		case CELL_VOLTAGE_DESTINATION_PULLDOWN_BUFFER:
+			chain->config->devices->cellVoltagesPulldown [3] = cell3;
+			chain->config->devices->cellVoltagesPulldown [4] = cell4;
+			chain->config->devices->cellVoltagesPulldown [5] = cell5;
+			break;
+		}
+	}
+
+	if (!readRegisterGroups (chain, COMMAND_RDCVC))
+	{
+		stop (chain);
+		return false;
+	}
+
+	for (uint16_t index = 0; index < chain->config->deviceCount; ++index)
+	{
+		float cell6 = WORD_TO_CELL_VOLTAGE ((chain->config->devices->rx [1] << 8) | chain->config->devices->rx [0]);
+		float cell7 = WORD_TO_CELL_VOLTAGE ((chain->config->devices->rx [3] << 8) | chain->config->devices->rx [2]);
+		float cell8 = WORD_TO_CELL_VOLTAGE ((chain->config->devices->rx [5] << 8) | chain->config->devices->rx [4]);
+
+		switch (destination)
+		{
+		case CELL_VOLTAGE_DESTINATION_VOLTAGE_BUFFER:
+			chain->config->devices->cellVoltages [6] = cell6;
+			chain->config->devices->cellVoltages [7] = cell7;
+			chain->config->devices->cellVoltages [8] = cell8;
+			break;
+		case CELL_VOLTAGE_DESTINATION_PULLUP_BUFFER:
+			chain->config->devices->cellVoltagesPullup [6] = cell6;
+			chain->config->devices->cellVoltagesPullup [7] = cell7;
+			chain->config->devices->cellVoltagesPullup [8] = cell8;
+			break;
+		case CELL_VOLTAGE_DESTINATION_PULLDOWN_BUFFER:
+			chain->config->devices->cellVoltagesPulldown [6] = cell6;
+			chain->config->devices->cellVoltagesPulldown [7] = cell7;
+			chain->config->devices->cellVoltagesPulldown [8] = cell8;
+			break;
+		}
+	}
+
+	if (!readRegisterGroups (chain, COMMAND_RDCVD))
+	{
+		stop (chain);
+		return false;
+	}
+
+	for (uint16_t index = 0; index < chain->config->deviceCount; ++index)
+	{
+		float cell9 = WORD_TO_CELL_VOLTAGE ((chain->config->devices->rx [1] << 8) | chain->config->devices->rx [0]);
+		float cell10 = WORD_TO_CELL_VOLTAGE ((chain->config->devices->rx [3] << 8) | chain->config->devices->rx [2]);
+		float cell11 = WORD_TO_CELL_VOLTAGE ((chain->config->devices->rx [5] << 8) | chain->config->devices->rx [4]);
+
+		switch (destination)
+		{
+		case CELL_VOLTAGE_DESTINATION_VOLTAGE_BUFFER:
+			chain->config->devices->cellVoltages [9] = cell9;
+			chain->config->devices->cellVoltages [10] = cell10;
+			chain->config->devices->cellVoltages [11] = cell11;
+			break;
+		case CELL_VOLTAGE_DESTINATION_PULLUP_BUFFER:
+			chain->config->devices->cellVoltagesPullup [9] = cell9;
+			chain->config->devices->cellVoltagesPullup [10] = cell10;
+			chain->config->devices->cellVoltagesPullup [11] = cell11;
+			break;
+		case CELL_VOLTAGE_DESTINATION_PULLDOWN_BUFFER:
+			chain->config->devices->cellVoltagesPulldown [9] = cell9;
+			chain->config->devices->cellVoltagesPulldown [10] = cell10;
+			chain->config->devices->cellVoltagesPulldown [11] = cell11;
+			break;
+		}
+	}
+
+	stop (chain);
+	return true;
 }
 
 void failGpio (ltc6811DaisyChain_t* chain)

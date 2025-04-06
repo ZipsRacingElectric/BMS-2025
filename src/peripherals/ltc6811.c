@@ -389,6 +389,8 @@ bool ltc6811OpenWireTest (ltc6811DaisyChain_t* chain)
 			if (device->openWireFaults [wireIndex])
 				device->state = LTC6811_STATE_CELL_FAULT;
 	}
+
+	return true;
 }
 
 uint16_t calculatePec (uint8_t* data, uint8_t dataCount)
@@ -658,7 +660,7 @@ bool configure (ltc6811DaisyChain_t* chain)
 		chain->config->devices [index].tx [2] = 0b00000000; // VOV = 0V
 		chain->config->devices [index].tx [3] = 0b00000000; //
 		chain->config->devices [index].tx [4] = 0b00000000; // No discharging
-		chain->config->devices [index].tx [5] = 0b00001000; // No discharge timeout
+		chain->config->devices [index].tx [5] = 0b00010000; // No discharge timeout
 	}
 
 	bool result = writeRegisterGroups (chain, COMMAND_WRCFGA);
@@ -694,28 +696,28 @@ bool sampleCells (ltc6811DaisyChain_t* chain, cellVoltageDestination_t destinati
 		return false;
 	}
 
-	for (uint16_t index = 0; index < chain->config->deviceCount; ++index)
+	for (ltc6811_t* device = chain->config->devices; device < chain->config->devices + chain->config->deviceCount; ++device)
 	{
-		float cell0 = WORD_TO_CELL_VOLTAGE ((chain->config->devices->rx [1] << 8) | chain->config->devices->rx [0]);
-		float cell1 = WORD_TO_CELL_VOLTAGE ((chain->config->devices->rx [3] << 8) | chain->config->devices->rx [2]);
-		float cell2 = WORD_TO_CELL_VOLTAGE ((chain->config->devices->rx [5] << 8) | chain->config->devices->rx [4]);
+		float cell0 = WORD_TO_CELL_VOLTAGE ((device->rx [1] << 8) | device->rx [0]);
+		float cell1 = WORD_TO_CELL_VOLTAGE ((device->rx [3] << 8) | device->rx [2]);
+		float cell2 = WORD_TO_CELL_VOLTAGE ((device->rx [5] << 8) | device->rx [4]);
 
 		switch (destination)
 		{
 		case CELL_VOLTAGE_DESTINATION_VOLTAGE_BUFFER:
-			chain->config->devices->cellVoltages [0] = cell0;
-			chain->config->devices->cellVoltages [1] = cell1;
-			chain->config->devices->cellVoltages [2] = cell2;
+			device->cellVoltages [0] = cell0;
+			device->cellVoltages [1] = cell1;
+			device->cellVoltages [2] = cell2;
 			break;
 		case CELL_VOLTAGE_DESTINATION_PULLUP_BUFFER:
-			chain->config->devices->cellVoltagesPullup [0] = cell0;
-			chain->config->devices->cellVoltagesPullup [1] = cell1;
-			chain->config->devices->cellVoltagesPullup [2] = cell2;
+			device->cellVoltagesPullup [0] = cell0;
+			device->cellVoltagesPullup [1] = cell1;
+			device->cellVoltagesPullup [2] = cell2;
 			break;
 		case CELL_VOLTAGE_DESTINATION_PULLDOWN_BUFFER:
-			chain->config->devices->cellVoltagesPulldown [0] = cell0;
-			chain->config->devices->cellVoltagesPulldown [1] = cell1;
-			chain->config->devices->cellVoltagesPulldown [2] = cell2;
+			device->cellVoltagesPulldown [0] = cell0;
+			device->cellVoltagesPulldown [1] = cell1;
+			device->cellVoltagesPulldown [2] = cell2;
 			break;
 		}
 	}
@@ -726,28 +728,28 @@ bool sampleCells (ltc6811DaisyChain_t* chain, cellVoltageDestination_t destinati
 		return false;
 	}
 
-	for (uint16_t index = 0; index < chain->config->deviceCount; ++index)
+	for (ltc6811_t* device = chain->config->devices; device < chain->config->devices + chain->config->deviceCount; ++device)
 	{
-		float cell3 = WORD_TO_CELL_VOLTAGE ((chain->config->devices->rx [1] << 8) | chain->config->devices->rx [0]);
-		float cell4 = WORD_TO_CELL_VOLTAGE ((chain->config->devices->rx [3] << 8) | chain->config->devices->rx [2]);
-		float cell5 = WORD_TO_CELL_VOLTAGE ((chain->config->devices->rx [5] << 8) | chain->config->devices->rx [4]);
+		float cell3 = WORD_TO_CELL_VOLTAGE ((device->rx [1] << 8) | device->rx [0]);
+		float cell4 = WORD_TO_CELL_VOLTAGE ((device->rx [3] << 8) | device->rx [2]);
+		float cell5 = WORD_TO_CELL_VOLTAGE ((device->rx [5] << 8) | device->rx [4]);
 
 		switch (destination)
 		{
 		case CELL_VOLTAGE_DESTINATION_VOLTAGE_BUFFER:
-			chain->config->devices->cellVoltages [3] = cell3;
-			chain->config->devices->cellVoltages [4] = cell4;
-			chain->config->devices->cellVoltages [5] = cell5;
+			device->cellVoltages [3] = cell3;
+			device->cellVoltages [4] = cell4;
+			device->cellVoltages [5] = cell5;
 			break;
 		case CELL_VOLTAGE_DESTINATION_PULLUP_BUFFER:
-			chain->config->devices->cellVoltagesPullup [3] = cell3;
-			chain->config->devices->cellVoltagesPullup [4] = cell4;
-			chain->config->devices->cellVoltagesPullup [5] = cell5;
+			device->cellVoltagesPullup [3] = cell3;
+			device->cellVoltagesPullup [4] = cell4;
+			device->cellVoltagesPullup [5] = cell5;
 			break;
 		case CELL_VOLTAGE_DESTINATION_PULLDOWN_BUFFER:
-			chain->config->devices->cellVoltagesPulldown [3] = cell3;
-			chain->config->devices->cellVoltagesPulldown [4] = cell4;
-			chain->config->devices->cellVoltagesPulldown [5] = cell5;
+			device->cellVoltagesPulldown [3] = cell3;
+			device->cellVoltagesPulldown [4] = cell4;
+			device->cellVoltagesPulldown [5] = cell5;
 			break;
 		}
 	}
@@ -758,28 +760,28 @@ bool sampleCells (ltc6811DaisyChain_t* chain, cellVoltageDestination_t destinati
 		return false;
 	}
 
-	for (uint16_t index = 0; index < chain->config->deviceCount; ++index)
+	for (ltc6811_t* device = chain->config->devices; device < chain->config->devices + chain->config->deviceCount; ++device)
 	{
-		float cell6 = WORD_TO_CELL_VOLTAGE ((chain->config->devices->rx [1] << 8) | chain->config->devices->rx [0]);
-		float cell7 = WORD_TO_CELL_VOLTAGE ((chain->config->devices->rx [3] << 8) | chain->config->devices->rx [2]);
-		float cell8 = WORD_TO_CELL_VOLTAGE ((chain->config->devices->rx [5] << 8) | chain->config->devices->rx [4]);
+		float cell6 = WORD_TO_CELL_VOLTAGE ((device->rx [1] << 8) | device->rx [0]);
+		float cell7 = WORD_TO_CELL_VOLTAGE ((device->rx [3] << 8) | device->rx [2]);
+		float cell8 = WORD_TO_CELL_VOLTAGE ((device->rx [5] << 8) | device->rx [4]);
 
 		switch (destination)
 		{
 		case CELL_VOLTAGE_DESTINATION_VOLTAGE_BUFFER:
-			chain->config->devices->cellVoltages [6] = cell6;
-			chain->config->devices->cellVoltages [7] = cell7;
-			chain->config->devices->cellVoltages [8] = cell8;
+			device->cellVoltages [6] = cell6;
+			device->cellVoltages [7] = cell7;
+			device->cellVoltages [8] = cell8;
 			break;
 		case CELL_VOLTAGE_DESTINATION_PULLUP_BUFFER:
-			chain->config->devices->cellVoltagesPullup [6] = cell6;
-			chain->config->devices->cellVoltagesPullup [7] = cell7;
-			chain->config->devices->cellVoltagesPullup [8] = cell8;
+			device->cellVoltagesPullup [6] = cell6;
+			device->cellVoltagesPullup [7] = cell7;
+			device->cellVoltagesPullup [8] = cell8;
 			break;
 		case CELL_VOLTAGE_DESTINATION_PULLDOWN_BUFFER:
-			chain->config->devices->cellVoltagesPulldown [6] = cell6;
-			chain->config->devices->cellVoltagesPulldown [7] = cell7;
-			chain->config->devices->cellVoltagesPulldown [8] = cell8;
+			device->cellVoltagesPulldown [6] = cell6;
+			device->cellVoltagesPulldown [7] = cell7;
+			device->cellVoltagesPulldown [8] = cell8;
 			break;
 		}
 	}
@@ -790,28 +792,28 @@ bool sampleCells (ltc6811DaisyChain_t* chain, cellVoltageDestination_t destinati
 		return false;
 	}
 
-	for (uint16_t index = 0; index < chain->config->deviceCount; ++index)
+	for (ltc6811_t* device = chain->config->devices; device < chain->config->devices + chain->config->deviceCount; ++device)
 	{
-		float cell9 = WORD_TO_CELL_VOLTAGE ((chain->config->devices->rx [1] << 8) | chain->config->devices->rx [0]);
-		float cell10 = WORD_TO_CELL_VOLTAGE ((chain->config->devices->rx [3] << 8) | chain->config->devices->rx [2]);
-		float cell11 = WORD_TO_CELL_VOLTAGE ((chain->config->devices->rx [5] << 8) | chain->config->devices->rx [4]);
+		float cell9 = WORD_TO_CELL_VOLTAGE ((device->rx [1] << 8) | device->rx [0]);
+		float cell10 = WORD_TO_CELL_VOLTAGE ((device->rx [3] << 8) | device->rx [2]);
+		float cell11 = WORD_TO_CELL_VOLTAGE ((device->rx [5] << 8) | device->rx [4]);
 
 		switch (destination)
 		{
 		case CELL_VOLTAGE_DESTINATION_VOLTAGE_BUFFER:
-			chain->config->devices->cellVoltages [9] = cell9;
-			chain->config->devices->cellVoltages [10] = cell10;
-			chain->config->devices->cellVoltages [11] = cell11;
+			device->cellVoltages [9] = cell9;
+			device->cellVoltages [10] = cell10;
+			device->cellVoltages [11] = cell11;
 			break;
 		case CELL_VOLTAGE_DESTINATION_PULLUP_BUFFER:
-			chain->config->devices->cellVoltagesPullup [9] = cell9;
-			chain->config->devices->cellVoltagesPullup [10] = cell10;
-			chain->config->devices->cellVoltagesPullup [11] = cell11;
+			device->cellVoltagesPullup [9] = cell9;
+			device->cellVoltagesPullup [10] = cell10;
+			device->cellVoltagesPullup [11] = cell11;
 			break;
 		case CELL_VOLTAGE_DESTINATION_PULLDOWN_BUFFER:
-			chain->config->devices->cellVoltagesPulldown [9] = cell9;
-			chain->config->devices->cellVoltagesPulldown [10] = cell10;
-			chain->config->devices->cellVoltagesPulldown [11] = cell11;
+			device->cellVoltagesPulldown [9] = cell9;
+			device->cellVoltagesPulldown [10] = cell10;
+			device->cellVoltagesPulldown [11] = cell11;
 			break;
 		}
 	}

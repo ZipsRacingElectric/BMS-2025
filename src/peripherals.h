@@ -18,7 +18,7 @@
 
 // Constants ------------------------------------------------------------------------------------------------------------------
 
-#define LTC_COUNT 1
+#define LTC_COUNT 2
 #define CELL_COUNT (LTC_COUNT * LTC6811_CELL_COUNT)
 #define TEMP_COUNT (LTC_COUNT * LTC6811_GPIO_COUNT)
 

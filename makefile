@@ -36,7 +36,7 @@ include common/src/peripherals/mc24lc32.mk
 include common/src/peripherals/thermistor_pulldown.mk
 
 # Compiler flags
-USE_OPT = -Og -Wall -Wextra
+USE_OPT = -O0 -Wall -Wextra -lm
 
 # C macro definitions
 UDEFS =

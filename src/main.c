@@ -39,25 +39,13 @@ int main (void)
 	debugHeartbeatStart (&ledLine, LOWPRIO);
 
 	// Peripheral Initialization
-	// if (!peripheralsInit ())
-	// {
-	// 	hardFaultCallback ();
-	// 	while (true);
-	// }
+	if (!peripheralsInit ())
+	{
+		hardFaultCallback ();
+		while (true);
+	}
 
-	ltcs [0].cellVoltages [0] = 0.0f;
-	ltcs [0].cellVoltages [1] = 0.1f;
-	ltcs [0].cellVoltages [2] = 0.2f;
-	ltcs [0].cellVoltages [3] = 0.3f;
-	ltcs [0].cellVoltages [4] = 0.4f;
-	ltcs [0].cellVoltages [5] = 0.5f;
-	ltcs [0].cellVoltages [6] = 0.6f;
-	ltcs [0].cellVoltages [7] = 0.7f;
-	ltcs [0].cellVoltages [8] = 0.8f;
-	ltcs [0].cellVoltages [9] = 0.9f;
-	ltcs [0].cellVoltages [10] = 1.0f;
-	ltcs [0].cellVoltages [11] = 1.1f;
-
+	// TODO(Barach): Check charger pin
 	if (!canInterfaceInit (NORMALPRIO))
 	{
 		hardFaultCallback ();
@@ -66,8 +54,6 @@ int main (void)
 
 	// Start the watchdog timer
 	watchdogStart ();
-
-	(void) thermistors;
 
 	while (true)
 	{
@@ -78,6 +64,6 @@ int main (void)
 		ltc6811SampleGpio (&ltcChain);
 		ltc6811OpenWireTest (&ltcChain);
 
-		chThdSleepMilliseconds (500);
+		chThdSleepMilliseconds (100);
 	}
 }

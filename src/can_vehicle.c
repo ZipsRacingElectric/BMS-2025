@@ -21,7 +21,7 @@ static void can1TxThread (void* arg);
 
 // Configuration --------------------------------------------------------------------------------------------------------------
 
-#define TX_THREAD_PERIOD TIME_MS2I(1000)
+#define TX_THREAD_PERIOD TIME_MS2I(200)
 
 /**
  * @brief Configuration of the CAN 1 peripheral.
@@ -82,6 +82,6 @@ void can1TxThread (void* arg)
 		for (uint16_t index = 0; index < CELL_MESSAGE_COUNT; ++index)
 			transmitCellMessage (&CAND1, TX_THREAD_PERIOD, index);
 
-		chThdSleepMilliseconds (TX_THREAD_PERIOD);
+		chThdSleep (TX_THREAD_PERIOD);
 	}
 }

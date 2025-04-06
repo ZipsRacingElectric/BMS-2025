@@ -5,7 +5,7 @@
 
 // Voltage Values (V)
 #define VOLTAGE_INVERSE_FACTOR		(1024.0f / 8.0f)
-#define VOLTAGE_TO_WORD(voltage)	(uint8_t) ((voltage) * VOLTAGE_INVERSE_FACTOR)
+#define VOLTAGE_TO_WORD(voltage)	(uint16_t) ((voltage) * VOLTAGE_INVERSE_FACTOR)
 
 // Message IDs ----------------------------------------------------------------------------------------------------------------
 
@@ -41,7 +41,7 @@ msg_t transmitCellMessage (CANDriver* driver, sysinterval_t timeout, uint16_t in
 
 	CANTxFrame frame =
 	{
-		.DLC	= 4,
+		.DLC	= 8,
 		.IDE	= CAN_IDE_STD,
 		.SID	= CELL_MESSAGE_BASE_ID + index,
 		.data8 =
@@ -50,7 +50,7 @@ msg_t transmitCellMessage (CANDriver* driver, sysinterval_t timeout, uint16_t in
 			(voltages [1] << 2) | ((voltages [0] >> 8) & 0b11),
 			(voltages [2] << 4) | ((voltages [1] >> 6) & 0b1111),
 			(voltages [3] << 6) | ((voltages [2] >> 4) & 0b111111),
-			voltages [3],
+			voltages [3] >> 2,
 			voltages [4],
 			(voltages [5] << 2) | ((voltages [4] >> 8) & 0b11),
 			(voltages [5] >> 6) & 0b1111

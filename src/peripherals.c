@@ -61,6 +61,13 @@ ltc6811DaisyChainConfig_t ltcChainConfig =
 			(analogSensor_t*) &thermistors [0][2],
 			(analogSensor_t*) &thermistors [0][3],
 			(analogSensor_t*) &thermistors [0][4],
+		},
+		{
+			(analogSensor_t*) &thermistors [1][0],
+			(analogSensor_t*) &thermistors [1][1],
+			(analogSensor_t*) &thermistors [1][2],
+			(analogSensor_t*) &thermistors [1][3],
+			(analogSensor_t*) &thermistors [1][4],
 		}
 	}
 };
@@ -96,9 +103,7 @@ bool peripheralsInit (void)
 	peripheralsReconfigure ();
 
 	// LTC daisy chain initialization
-	if (!ltc6811Init (&ltcChain, &ltcChainConfig))
-		return false;
-
+	ltc6811Init (&ltcChain, &ltcChainConfig);
 	return true;
 }
 

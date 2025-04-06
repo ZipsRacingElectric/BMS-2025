@@ -79,8 +79,11 @@ void can1TxThread (void* arg)
 
 	while (true)
 	{
-		for (uint16_t index = 0; index < CELL_MESSAGE_COUNT; ++index)
-			transmitCellMessage (&CAND1, TX_THREAD_PERIOD, index);
+		for (uint16_t index = 0; index < VOLTAGE_MESSAGE_COUNT; ++index)
+			transmitVoltageMessage (&CAND1, TX_THREAD_PERIOD, index);
+
+		for (uint16_t index = 0; index < SENSE_LINE_STATUS_MESSAGE_COUNT; ++index)
+			transmitSenseLineStatusMessage (&CAND1, TX_THREAD_PERIOD, index);
 
 		chThdSleep (TX_THREAD_PERIOD);
 	}

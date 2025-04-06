@@ -48,11 +48,15 @@ ltc6811DaisyChainConfig_t ltcChainConfig =
 		.ssport			= PAL_PORT (LINE_CS_ISOSPI),	// IsoSPI transceiver CS pin.
 		.sspad			= PAL_PAD (LINE_CS_ISOSPI)		//
 	},
+	.spiMiso			= LINE_SPI1_MISO,
 	.devices			= ltcs,
 	.deviceCount		= LTC_COUNT,
 	.readAttemptCount	= 5,
 	.cellAdcMode		= LTC6811_ADC_422HZ, // TODO(Barach): Should be 26Hz
 	.gpioAdcMode		= LTC6811_ADC_26HZ,
+	.openWireTestIterations	= 4,
+	.cellVoltageMax		= 4.2,
+	.cellVoltageMin		= 2.7,
 	.gpioAdcSensors		=
 	{
 		{
@@ -69,7 +73,7 @@ ltc6811DaisyChainConfig_t ltcChainConfig =
 			(analogSensor_t*) &thermistors [1][3],
 			(analogSensor_t*) &thermistors [1][4],
 		}
-	}
+	},
 };
 
 static const thermistorPulldownConfig_t THERMISTOR_CONFIG =

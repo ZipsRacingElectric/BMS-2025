@@ -215,8 +215,10 @@ bool ltc6811Init (ltc6811DaisyChain_t* chain, ltc6811DaisyChainConfig_t* config)
 {
 	chain->config = config;
 
+	// Start from the ready state
 	for (uint16_t index = 0; index < chain->config->deviceCount; ++index)
 		chain->config->devices [index].state = LTC6811_STATE_READY;
+	chain->state = LTC6811_CHAIN_STATE_READY;
 
 	if (!configure (chain))
 		return false;
@@ -227,8 +229,14 @@ bool ltc6811Init (ltc6811DaisyChain_t* chain, ltc6811DaisyChainConfig_t* config)
 
 bool ltc6811SampleCells (ltc6811DaisyChain_t* chain)
 {
-	if (sampleCells (chain, CELL_VOLTAGE_DESTINATION_VOLTAGE_BUFFER))
+	start (chain);
+	wakeupSleep (chain);
+
+	if (!sampleCells (chain, CELL_VOLTAGE_DESTINATION_VOLTAGE_BUFFER))
+	{
+		stop (chain);
 		return false;
+	}
 
 	for (ltc6811_t* device = chain->config->devices; device < chain->config->devices + chain->config->deviceCount; ++device)
 	{
@@ -248,6 +256,7 @@ bool ltc6811SampleCells (ltc6811DaisyChain_t* chain)
 		}
 	}
 
+	stop (chain);
 	return true;
 }
 
@@ -347,11 +356,19 @@ bool ltc6811OpenWireTest (ltc6811DaisyChain_t* chain)
 		}
 
 		// Block until complete.
-		pollAdc (chain, ADC_MODE_TIMEOUTS [chain->config->cellAdcMode]);
+		if (!pollAdc (chain, ADC_MODE_TIMEOUTS [chain->config->cellAdcMode]))
+		{
+			stop (chain);
+			return false;
+		}
 	}
 
 	// Sample the cell voltages into the pull-up buffer.
-	sampleCells (chain, CELL_VOLTAGE_DESTINATION_PULLUP_BUFFER);
+	if (!sampleCells (chain, CELL_VOLTAGE_DESTINATION_PULLUP_BUFFER))
+	{
+		stop (chain);
+		return false;
+	}
 
 	// Pull-down measurement
 	for (uint8_t index = 0; index < chain->config->openWireTestIterations; ++index)
@@ -364,11 +381,22 @@ bool ltc6811OpenWireTest (ltc6811DaisyChain_t* chain)
 		}
 
 		// Block until complete.
-		pollAdc (chain, ADC_MODE_TIMEOUTS [chain->config->cellAdcMode]);
+		if (!pollAdc (chain, ADC_MODE_TIMEOUTS [chain->config->cellAdcMode]))
+		{
+			stop (chain);
+			return false;
+		}
 	}
 
 	// Sample the cell voltages into the pull-down buffer.
-	sampleCells (chain, CELL_VOLTAGE_DESTINATION_PULLDOWN_BUFFER);
+	if (!sampleCells (chain, CELL_VOLTAGE_DESTINATION_PULLDOWN_BUFFER))
+	{
+		stop (chain);
+		return false;
+	}
+
+	// TODO(Barach): If adding mutex, this needs moved.
+	stop (chain);
 
 	// Check each device, cell-by-cell
 	// Note that in the datasheet, sense wires are indexed 0 to 12 while cells are indexed 1 to 12.
@@ -378,8 +406,16 @@ bool ltc6811OpenWireTest (ltc6811DaisyChain_t* chain)
 		device->openWireFaults [0] = device->cellVoltagesPullup [0] < 0.001f && device->cellVoltagesPullup [0] > -0.001f;
 
 		// For wire n in [1 to 11], if cell delta (n+1) < -400mV, the wire is open.
-		for (uint8_t wireIndex = 1; wireIndex < LTC6811_CELL_COUNT; ++wireIndex)
+		for (uint8_t wireIndex = 1; wireIndex < LTC6811_CELL_COUNT - 1; ++wireIndex)
+		{
+			device->cellVoltagesDelta [wireIndex] = device->cellVoltagesPullup [wireIndex] - device->cellVoltagesPulldown [wireIndex];
 			device->openWireFaults [wireIndex] = device->cellVoltagesDelta [wireIndex] < -0.4f;
+		}
+
+		// TODO(Barach): The datasheet calls out 400mV, but testing shows it as 800mV. Figure out why.
+		// For wire 11, if cell delta 12 < -800mV, the wire is open.
+		device->cellVoltagesDelta [11] = device->cellVoltagesPullup [11] - device->cellVoltagesPulldown [11];
+		device->openWireFaults [11] = device->cellVoltagesDelta [11] < -0.8f;
 
 		// For wire 12, if cell 12 read 0V (1mV tolerance for noise) during pull-down, the wire is open.
 		device->openWireFaults [12] = device->cellVoltagesPulldown [11] < 0.001f && device->cellVoltagesPulldown [11] > -0.001f;
@@ -469,14 +505,18 @@ bool pollAdc (ltc6811DaisyChain_t* chain, sysinterval_t timeout)
 	}
 
 	// Wait for the conversion to finish.
-	palEnableLineEvent (chain->config->spiMiso, PAL_EVENT_MODE_RISING_EDGE);
-	palWaitLineTimeout (chain->config->spiMiso, timeout);
-	palDisableLineEvent (chain->config->spiMiso);
+	// palEnableLineEvent (chain->config->spiMiso, PAL_EVENT_MODE_RISING_EDGE);
+	// palWaitLineTimeout (chain->config->spiMiso, timeout);
+	// palDisableLineEvent (chain->config->spiMiso);
 
-	// If conversion is finished, success, otherwise failed.
-	bool result = palReadLine (chain->config->spiMiso);
-	spiUnselect (chain->config->spiDriver);
-	return result;
+	// TODO(Barach): Polling isn't working
+	chThdSleep (timeout);
+	return true;
+
+	// // If conversion is finished, success, otherwise failed.
+	// bool result = palReadLine (chain->config->spiMiso);
+	// spiUnselect (chain->config->spiDriver);
+	// return result;
 }
 
 bool writeCommand (ltc6811DaisyChain_t* chain, uint16_t command)
@@ -666,7 +706,6 @@ bool configure (ltc6811DaisyChain_t* chain)
 	bool result = writeRegisterGroups (chain, COMMAND_WRCFGA);
 
 	stop (chain);
-
 	return result;
 }
 
@@ -674,27 +713,15 @@ bool sampleCells (ltc6811DaisyChain_t* chain, cellVoltageDestination_t destinati
 {
 	// See LTC6811 datasheet section "Measuring Cell Voltages (ADCV Command)", pg.25.
 
-	start (chain);
-	wakeupSleep (chain);
-
 	// Start the cell voltage conversion for all cells, permitting discharge.
 	if (!writeCommand (chain, COMMAND_ADCV (chain->config->cellAdcMode, true, 0b000)))
-	{
-		stop (chain);
 		return false;
-	}
 
 	if (!pollAdc (chain, ADC_MODE_TIMEOUTS [chain->config->cellAdcMode]))
-	{
-		stop (chain);
 		return false;
-	}
 
 	if (!readRegisterGroups (chain, COMMAND_RDCVA))
-	{
-		stop (chain);
 		return false;
-	}
 
 	for (ltc6811_t* device = chain->config->devices; device < chain->config->devices + chain->config->deviceCount; ++device)
 	{
@@ -723,10 +750,7 @@ bool sampleCells (ltc6811DaisyChain_t* chain, cellVoltageDestination_t destinati
 	}
 
 	if (!readRegisterGroups (chain, COMMAND_RDCVB))
-	{
-		stop (chain);
 		return false;
-	}
 
 	for (ltc6811_t* device = chain->config->devices; device < chain->config->devices + chain->config->deviceCount; ++device)
 	{
@@ -755,10 +779,7 @@ bool sampleCells (ltc6811DaisyChain_t* chain, cellVoltageDestination_t destinati
 	}
 
 	if (!readRegisterGroups (chain, COMMAND_RDCVC))
-	{
-		stop (chain);
 		return false;
-	}
 
 	for (ltc6811_t* device = chain->config->devices; device < chain->config->devices + chain->config->deviceCount; ++device)
 	{
@@ -787,10 +808,7 @@ bool sampleCells (ltc6811DaisyChain_t* chain, cellVoltageDestination_t destinati
 	}
 
 	if (!readRegisterGroups (chain, COMMAND_RDCVD))
-	{
-		stop (chain);
 		return false;
-	}
 
 	for (ltc6811_t* device = chain->config->devices; device < chain->config->devices + chain->config->deviceCount; ++device)
 	{
@@ -818,7 +836,6 @@ bool sampleCells (ltc6811DaisyChain_t* chain, cellVoltageDestination_t destinati
 		}
 	}
 
-	stop (chain);
 	return true;
 }
 

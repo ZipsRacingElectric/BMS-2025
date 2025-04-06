@@ -52,13 +52,13 @@ int main (void)
 		while (true);
 	}
 
-	// Start the watchdog timer
-	watchdogStart ();
+	// // Start the watchdog timer
+	// watchdogStart ();
 
 	while (true)
 	{
-		// Reset the watchdog
-		watchdogReset ();
+		// // Reset the watchdog
+		// watchdogReset ();
 
 		ltc6811SampleCells (&ltcChain);
 		ltc6811SampleGpio (&ltcChain);

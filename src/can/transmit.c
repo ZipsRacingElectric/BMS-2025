@@ -4,14 +4,18 @@
 // Conversions -----------------------------------------------------------------------------------------------------------------
 
 // Voltage Values (V)
-#define VOLTAGE_INVERSE_FACTOR		(1024.0f / 8.0f)
-#define VOLTAGE_TO_WORD(voltage)	(uint16_t) ((voltage) * VOLTAGE_INVERSE_FACTOR)
+#define VOLTAGE_INVERSE_FACTOR				(1024.0f / 8.0f)
+#define VOLTAGE_TO_WORD(voltage)			(uint16_t) ((voltage) * VOLTAGE_INVERSE_FACTOR)
+
+// Temperature Values (C)
+#define TEMPERATURE_INVERSE_FACTOR			(4096.0f / 256.0f)
+#define TEMPERATURE_TO_WORD(temperature)	(uint16_t) ((temperature) * TEMPERATURE_INVERSE_FACTOR)
 
 // Message IDs ----------------------------------------------------------------------------------------------------------------
 
-#define CELL_MESSAGE_BASE_ID		0x700
-#define TEMP_MESSAGE_BASE_ID		0x710
-#define SENSE_LINE_STATUS_BASE_ID	0x720
+#define VOLTAGE_MESSAGE_BASE_ID		0x700
+#define TEMPERATURE_MESSAGE_BASE_ID	0x718
+#define SENSE_LINE_STATUS_BASE_ID	0x724
 
 // Functions ------------------------------------------------------------------------------------------------------------------
 
@@ -19,23 +23,18 @@ msg_t transmitVoltageMessage (CANDriver* driver, sysinterval_t timeout, uint16_t
 {
 	// TODO(Barach): Remap to in-order.
 	uint16_t ltcIndex = index / 2;
-	uint8_t voltageOffset = (index % 2) * 6;
+	uint8_t voltOffset = (index % 2) * 6;
 
-	uint16_t voltages[6];
-
-	voltages [0] = VOLTAGE_TO_WORD (ltcs [ltcIndex].cellVoltages [voltageOffset]);
-	voltages [1] = VOLTAGE_TO_WORD (ltcs [ltcIndex].cellVoltages [voltageOffset + 1]);
-	voltages [2] = VOLTAGE_TO_WORD (ltcs [ltcIndex].cellVoltages [voltageOffset + 2]);
-	voltages [3] = VOLTAGE_TO_WORD (ltcs [ltcIndex].cellVoltages [voltageOffset + 3]);
-	voltages [4] = VOLTAGE_TO_WORD (ltcs [ltcIndex].cellVoltages [voltageOffset + 4]);
-	voltages [5] = VOLTAGE_TO_WORD (ltcs [ltcIndex].cellVoltages [voltageOffset + 5]);
+	uint16_t voltages [6];
+	for (uint8_t voltIndex = 0; voltIndex < 6; ++voltIndex)
+		voltages [voltIndex] = VOLTAGE_TO_WORD (ltcs [ltcIndex].cellVoltages [voltOffset + voltIndex]);
 
 	CANTxFrame frame =
 	{
 		.DLC	= 8,
 		.IDE	= CAN_IDE_STD,
-		.SID	= CELL_MESSAGE_BASE_ID + index,
-		.data8 =
+		.SID	= VOLTAGE_MESSAGE_BASE_ID + index,
+		.data8	=
 		{
 			voltages [0],
 			(voltages [1] << 2) | ((voltages [0] >> 8) & 0b11),
@@ -53,13 +52,29 @@ msg_t transmitVoltageMessage (CANDriver* driver, sysinterval_t timeout, uint16_t
 
 msg_t transmitTemperatureMessage (CANDriver* driver, sysinterval_t timeout, uint16_t index)
 {
-	// TODO(Barach): Mapping
+	uint16_t temperatures [5];
+	for (uint8_t tempIndex = 0; tempIndex < 5; ++tempIndex)
+		temperatures [tempIndex] = TEMPERATURE_TO_WORD (thermistors [index][tempIndex].temperature);
 
-	// if (index % 2 == 0)
-	// {
-	// 	// Low sense board
-	// }
-	return MSG_OK;
+	CANTxFrame frame =
+	{
+		.DLC	= 8,
+		.IDE	= CAN_IDE_STD,
+		.SID	= TEMPERATURE_MESSAGE_BASE_ID + index,
+		.data8	=
+		{
+			temperatures [0],
+			(temperatures [1] << 4) | ((temperatures [0] >> 8) & 0b1111),
+			temperatures [1] >> 4,
+			temperatures [2],
+			(temperatures [3] << 4) | ((temperatures [2] >> 8) & 0b1111),
+			temperatures [3] >> 4,
+			temperatures [4],
+			(temperatures [4] >> 8) & 0b1111
+		}
+	};
+
+	return canTransmitTimeout (driver, CAN_ANY_MAILBOX, &frame, timeout);
 }
 
 msg_t transmitSenseLineStatusMessage (CANDriver* driver, sysinterval_t timeout, uint16_t index)

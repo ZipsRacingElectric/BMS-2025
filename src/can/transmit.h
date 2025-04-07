@@ -16,7 +16,7 @@
 // Constants ------------------------------------------------------------------------------------------------------------------
 
 #define VOLTAGE_MESSAGE_COUNT ((CELL_COUNT + 5) / 6)
-#define TEMPERATURE_MESSAGE_COUNT ((TEMP_COUNT + 7) / 8)
+#define TEMPERATURE_MESSAGE_COUNT ((TEMP_COUNT + 4) / 5)
 #define SENSE_LINE_STATUS_MESSAGE_COUNT ((CELL_COUNT + 47) / 48)
 
 // Functions ------------------------------------------------------------------------------------------------------------------

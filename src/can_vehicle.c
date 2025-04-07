@@ -79,9 +79,15 @@ void can1TxThread (void* arg)
 
 	while (true)
 	{
+		// Cell voltage messages
 		for (uint16_t index = 0; index < VOLTAGE_MESSAGE_COUNT; ++index)
 			transmitVoltageMessage (&CAND1, TX_THREAD_PERIOD, index);
 
+		// Sense line temperature messages
+		for (uint16_t index = 0; index < TEMPERATURE_MESSAGE_COUNT; ++index)
+			transmitTemperatureMessage (&CAND1, TX_THREAD_PERIOD, index);
+
+		// Sense line status messages
 		for (uint16_t index = 0; index < SENSE_LINE_STATUS_MESSAGE_COUNT; ++index)
 			transmitSenseLineStatusMessage (&CAND1, TX_THREAD_PERIOD, index);
 

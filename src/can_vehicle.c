@@ -79,6 +79,9 @@ void can1TxThread (void* arg)
 
 	while (true)
 	{
+		// Status message
+		transmitStatusMessage (&CAND1, TX_THREAD_PERIOD);
+
 		// Cell voltage messages
 		for (uint16_t index = 0; index < VOLTAGE_MESSAGE_COUNT; ++index)
 			transmitVoltageMessage (&CAND1, TX_THREAD_PERIOD, index);

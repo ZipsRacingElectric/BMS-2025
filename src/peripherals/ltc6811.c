@@ -37,6 +37,48 @@
 
 #define COMMAND_PLADC					0b11100010100
 
+#define VUV(vuv)						((uint16_t) (vuv * 625.0f) - 1)
+#define VOV(vov)						((uint16_t) (vov * 625.0f))
+
+#define CFGR0(gpio5, gpio4, gpio3, gpio2, gpio1, refon, adcopt)																\
+	((uint8_t) (((gpio5) << 7) | ((gpio4) << 6) | ((gpio3) << 5) | ((gpio2) << 4) | ((gpio1) << 3) | ((refon) << 2) |		\
+	(adcopt)))
+#define CFGR1(vuv)						((uint8_t) VUV (vuv))
+#define CFGR2(vuv, vov)					((uint8_t) ((VOV (vov) << 4) | (VUV (vuv) >> 8)))
+#define CFGR3(vov)						((uint8_t) (VOV (vov) >> 4))
+#define CFGR4(dcc8, dcc7, dcc6, dcc5, dcc4, dcc3, dcc2, dcc1)																\
+	((uint8_t) (((dcc8) << 7) | ((dcc7) << 6) | ((dcc6) << 5) | ((dcc5) << 4) | ((dcc4) << 3) | ((dcc3) << 2) |				\
+	((dcc2) << 1) | (dcc1)))
+#define CFGR5(dcto, dcc12, dcc11, dcc10, dcc9)																				\
+	((uint8_t) (((dcto) << 4) | ((dcc12) << 3) | ((dcc11) << 2) | ((dcc10) << 1) | (dcc9)))
+
+#define STBR2_C1UV(stbr2)				((stbr2 & 0b00000001) == 0b00000001)
+#define STBR2_C1OV(stbr2)				((stbr2 & 0b00000010) == 0b00000010)
+#define STBR2_C2UV(stbr2)				((stbr2 & 0b00000100) == 0b00000100)
+#define STBR2_C2OV(stbr2)				((stbr2 & 0b00001000) == 0b00001000)
+#define STBR2_C3UV(stbr2)				((stbr2 & 0b00010000) == 0b00010000)
+#define STBR2_C3OV(stbr2)				((stbr2 & 0b00100000) == 0b00100000)
+#define STBR2_C4UV(stbr2)				((stbr2 & 0b01000000) == 0b01000000)
+#define STBR2_C4OV(stbr2)				((stbr2 & 0b10000000) == 0b10000000)
+
+#define STBR3_C5UV(stbr3)				((stbr3 & 0b00000001) == 0b00000001)
+#define STBR3_C5OV(stbr3)				((stbr3 & 0b00000010) == 0b00000010)
+#define STBR3_C6UV(stbr3)				((stbr3 & 0b00000100) == 0b00000100)
+#define STBR3_C6OV(stbr3)				((stbr3 & 0b00001000) == 0b00001000)
+#define STBR3_C7UV(stbr3)				((stbr3 & 0b00010000) == 0b00010000)
+#define STBR3_C7OV(stbr3)				((stbr3 & 0b00100000) == 0b00100000)
+#define STBR3_C8UV(stbr3)				((stbr3 & 0b01000000) == 0b01000000)
+#define STBR3_C8OV(stbr3)				((stbr3 & 0b10000000) == 0b10000000)
+
+#define STBR4_C9UV(stbr4)				((stbr4 & 0b00000001) == 0b00000001)
+#define STBR4_C9OV(stbr4)				((stbr4 & 0b00000010) == 0b00000010)
+#define STBR4_C10UV(stbr4)				((stbr4 & 0b00000100) == 0b00000100)
+#define STBR4_C10OV(stbr4)				((stbr4 & 0b00001000) == 0b00001000)
+#define STBR4_C11UV(stbr4)				((stbr4 & 0b00010000) == 0b00010000)
+#define STBR4_C11OV(stbr4)				((stbr4 & 0b00100000) == 0b00100000)
+#define STBR4_C12UV(stbr4)				((stbr4 & 0b01000000) == 0b01000000)
+#define STBR4_C12OV(stbr4)				((stbr4 & 0b10000000) == 0b10000000)
+
 // 100 uV / LSB
 #define CELL_VOLTAGE_FACTOR				0.0001f
 #define WORD_TO_CELL_VOLTAGE(word)		(((uint16_t) (word)) * CELL_VOLTAGE_FACTOR)
@@ -238,22 +280,44 @@ bool ltc6811SampleCells (ltc6811DaisyChain_t* chain)
 		return false;
 	}
 
+	// Read the status register group B
+	if (!readRegisterGroups (chain, COMMAND_RDSTATB))
+	{
+		stop (chain);
+		return false;
+	}
+
 	for (ltc6811_t* device = chain->config->devices; device < chain->config->devices + chain->config->deviceCount; ++device)
 	{
-		for (uint16_t cellIndex = 0; cellIndex < LTC6811_CELL_COUNT; ++cellIndex)
-		{
-			if (device->cellVoltages [cellIndex] < chain->config->cellVoltageMin)
-			{
-				device->undervoltageFaults [cellIndex] = true;
-				device->state = LTC6811_STATE_CELL_FAULT;
-			}
+		// STBR2
+		device->undervoltageFaults [0] = STBR2_C1UV (device->rx [2]);
+		device->undervoltageFaults [1] = STBR2_C2UV (device->rx [2]);
+		device->undervoltageFaults [2] = STBR2_C3UV (device->rx [2]);
+		device->undervoltageFaults [3] = STBR2_C4UV (device->rx [2]);
+		device->overvoltageFaults [0] = STBR2_C1OV (device->rx [2]);
+		device->overvoltageFaults [1] = STBR2_C2OV (device->rx [2]);
+		device->overvoltageFaults [2] = STBR2_C3OV (device->rx [2]);
+		device->overvoltageFaults [3] = STBR2_C4OV (device->rx [2]);
 
-			if (device->cellVoltages [cellIndex] > chain->config->cellVoltageMax)
-			{
-				device->overvoltageFaults [cellIndex] = true;
-				device->state = LTC6811_STATE_CELL_FAULT;
-			}
-		}
+		// STBR3
+		device->undervoltageFaults [4] = STBR3_C5UV (device->rx [3]);
+		device->undervoltageFaults [5] = STBR3_C6UV (device->rx [3]);
+		device->undervoltageFaults [6] = STBR3_C7UV (device->rx [3]);
+		device->undervoltageFaults [7] = STBR3_C8UV (device->rx [3]);
+		device->overvoltageFaults [4] = STBR3_C5OV (device->rx [3]);
+		device->overvoltageFaults [5] = STBR3_C6OV (device->rx [3]);
+		device->overvoltageFaults [6] = STBR3_C7OV (device->rx [3]);
+		device->overvoltageFaults [7] = STBR3_C8OV (device->rx [3]);
+
+		// STBR4
+		device->undervoltageFaults [8] = STBR4_C9UV (device->rx [4]);
+		device->undervoltageFaults [9] = STBR4_C10UV (device->rx [4]);
+		device->undervoltageFaults [10] = STBR4_C11UV (device->rx [4]);
+		device->undervoltageFaults [11] = STBR4_C12UV (device->rx [4]);
+		device->overvoltageFaults [8] = STBR4_C9OV (device->rx [4]);
+		device->overvoltageFaults [9] = STBR4_C10OV (device->rx [4]);
+		device->overvoltageFaults [10] = STBR4_C11OV (device->rx [4]);
+		device->overvoltageFaults [11] = STBR4_C12OV (device->rx [4]);
 	}
 
 	stop (chain);
@@ -306,7 +370,12 @@ bool ltc6811SampleGpio (ltc6811DaisyChain_t* chain)
 				continue;
 
 			uint16_t sample = device->rx [gpioIndex * 2 - 5] << 8 | device->rx [gpioIndex * 2 - 6];
-			sensor->callback (sensor, sample);
+
+			// Update the sensor with the last sample, scale by VREF2 if ratiometric sensors are specified.
+			if (chain->config->gpioAdcsRatiometric [gpioIndex])
+				sensor->callback (sensor, 30000.0f * sample / device->vref2);
+			else
+				sensor->callback (sensor, sample);
 		}
 	}
 
@@ -330,7 +399,12 @@ bool ltc6811SampleGpio (ltc6811DaisyChain_t* chain)
 				continue;
 
 			uint16_t sample = device->rx [gpioIndex * 2 + 1] << 8 | device->rx [gpioIndex * 2];
-			sensor->callback (sensor, sample);
+
+			// Update the sensor with the last sample, scale by VREF2 if ratiometric sensors are specified.
+			if (chain->config->gpioAdcsRatiometric [gpioIndex])
+				sensor->callback (sensor, 30000.0f * sample / device->vref2);
+			else
+				sensor->callback (sensor, sample);
 		}
 	}
 
@@ -693,14 +767,31 @@ bool configure (ltc6811DaisyChain_t* chain)
 	start (chain);
 	wakeupSleep (chain);
 
+	// // Write the configuration register group
+	// for (uint16_t index = 0; index < chain->config->deviceCount; ++index)
+	// {
+	// 	chain->config->devices [index].tx [0] = 0b11111000; // GPIO high impedence, ref disabled outside conversion, ADC option 0
+	// 	chain->config->devices [index].tx [1] = 0b00000000; // VUV = 0V
+	// 	chain->config->devices [index].tx [2] = 0b00000000; // VOV = 0V
+	// 	chain->config->devices [index].tx [3] = 0b00000000; //
+	// 	chain->config->devices [index].tx [4] = 0b00000000; // No discharging
+	// 	chain->config->devices [index].tx [5] = 0b00000000; // No discharge timeout
+	// }
+
+	// Write the configuration register group
 	for (uint16_t index = 0; index < chain->config->deviceCount; ++index)
 	{
-		chain->config->devices [index].tx [0] = 0b11111000; // GPIO high impedence, ref disabled outside conversion, ADC option 0
-		chain->config->devices [index].tx [1] = 0b00000000; // VUV = 0V
-		chain->config->devices [index].tx [2] = 0b00000000; // VOV = 0V
-		chain->config->devices [index].tx [3] = 0b00000000; //
-		chain->config->devices [index].tx [4] = 0b00000000; // No discharging
-		chain->config->devices [index].tx [5] = 0b00010000; // No discharge timeout
+		// GPIO set to high impedence, reference disabled outside conversion, ADC option 0.
+		chain->config->devices [index].tx [0] = CFGR0 (1, 1, 1, 1, 1, 0, 0);
+
+		// Undervoltage / overvoltage values.
+		chain->config->devices [index].tx [1] = CFGR1 (chain->config->cellVoltageMin);
+		chain->config->devices [index].tx [2] = CFGR2 (chain->config->cellVoltageMin, chain->config->cellVoltageMax);
+		chain->config->devices [index].tx [3] = CFGR3 (chain->config->cellVoltageMax);
+
+		// No discharging or discharge timeout.
+		chain->config->devices [index].tx [4] = CFGR4 (0, 0, 0, 0, 0, 0, 0, 0);
+		chain->config->devices [index].tx [5] = CFGR5 (chain->config->dischargeTimeout, 0, 0, 0, 0);
 	}
 
 	bool result = writeRegisterGroups (chain, COMMAND_WRCFGA);

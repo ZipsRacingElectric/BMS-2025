@@ -38,6 +38,28 @@ typedef enum
 	LTC6811_ADC_26HZ	= 0b11,
 } ltc6811AdcMode_t;
 
+/// @brief The maximum amount of time cells may be discharged without any update. TODO(Barach): There is no public way to
+/// update or balance yet.
+typedef enum
+{
+	LTC6811_DISCHARGE_TIMEOUT_DISABLED	= 0x0,
+	LTC6811_DISCHARGE_TIMEOUT_30_S		= 0x1,
+	LTC6811_DISCHARGE_TIMEOUT_1_MIN		= 0x2,
+	LTC6811_DISCHARGE_TIMEOUT_2_MIN		= 0x3,
+	LTC6811_DISCHARGE_TIMEOUT_3_MIN		= 0x4,
+	LTC6811_DISCHARGE_TIMEOUT_4_MIN		= 0x5,
+	LTC6811_DISCHARGE_TIMEOUT_5_MIN		= 0x6,
+	LTC6811_DISCHARGE_TIMEOUT_10_MIN	= 0x7,
+	LTC6811_DISCHARGE_TIMEOUT_15_MIN	= 0x8,
+	LTC6811_DISCHARGE_TIMEOUT_20_MIN	= 0x9,
+	LTC6811_DISCHARGE_TIMEOUT_30_MIN	= 0xA,
+	LTC6811_DISCHARGE_TIMEOUT_40_MIN	= 0xB,
+	LTC6811_DISCHARGE_TIMEOUT_60_MIN	= 0xC,
+	LTC6811_DISCHARGE_TIMEOUT_75_MIN	= 0xD,
+	LTC6811_DISCHARGE_TIMEOUT_90_MIN	= 0xE,
+	LTC6811_DISCHARGE_TIMEOUT_120_MIN	= 0xF
+} ltc6811DischargeTimeout_t;
+
 typedef enum
 {
 	/// @brief Indicates a packet with an incorrect PEC was received. All other information about the device is void.
@@ -105,6 +127,9 @@ typedef struct
 	/// @brief The ADC conversion mode to use for measuring the GPIO voltages.
 	ltc6811AdcMode_t gpioAdcMode;
 
+	/// @brief TODO(Barach)
+	ltc6811DischargeTimeout_t dischargeTimeout;
+
 	/// @brief The number of pull-up / pull-down command iterations to perform during the open wire test. This value should be
 	/// determined through testing, but cannot be less than 2.
 	uint8_t openWireTestIterations;
@@ -114,6 +139,10 @@ typedef struct
 
 	/// @brief The maximum plausible cell voltage measurement, any higher indicates a fault condition.
 	float cellVoltageMax;
+
+	/// @brief Indicates whether each GPIO ADC sensor is ratiometric with respect to VREF2. If true, samples will be scaled from
+	// [0, 30000), where 30000 => VREF2.
+	bool gpioAdcsRatiometric [LTC6811_GPIO_COUNT];
 
 	/// @brief Multidimensional array of analog sensors to call upon sampling each device's GPIO. Must be size
 	/// [ @c deviceCount ][ @c LTC6811_GPIO_COUNT ].

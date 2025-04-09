@@ -13,11 +13,54 @@
 
 // Message IDs ----------------------------------------------------------------------------------------------------------------
 
+#define STATUS_MESSAGE_ID			0x727
 #define VOLTAGE_MESSAGE_BASE_ID		0x700
 #define TEMPERATURE_MESSAGE_BASE_ID	0x718
 #define SENSE_LINE_STATUS_BASE_ID	0x724
 
 // Functions ------------------------------------------------------------------------------------------------------------------
+
+msg_t transmitStatusMessage (CANDriver* driver, sysinterval_t timeout)
+{
+	bool overvoltage = false;
+	for (uint16_t ltcIndex = 0; ltcIndex < LTC_COUNT; ++ltcIndex)
+		for (uint8_t cellIndex = 0; cellIndex < LTC6811_CELL_COUNT; ++cellIndex)
+			if (ltcs [ltcIndex].overvoltageFaults [cellIndex])
+				overvoltage = true;
+
+	bool undervoltage = false;
+	for (uint16_t ltcIndex = 0; ltcIndex < LTC_COUNT; ++ltcIndex)
+		for (uint8_t cellIndex = 0; cellIndex < LTC6811_CELL_COUNT; ++cellIndex)
+			if (ltcs [ltcIndex].undervoltageFaults [cellIndex])
+				undervoltage = true;
+
+	bool senseLine = false;
+	for (uint16_t ltcIndex = 0; ltcIndex < LTC_COUNT; ++ltcIndex)
+		for (uint8_t cellIndex = 0; cellIndex < LTC6811_CELL_COUNT + 1; ++cellIndex)
+			if (ltcs [ltcIndex].openWireFaults [cellIndex])
+				senseLine = true;
+
+	bool selfTest = false;
+
+	CANTxFrame frame =
+	{
+		.DLC	= 1,
+		.IDE	= CAN_IDE_STD,
+		.SID	= STATUS_MESSAGE_ID,
+		.data8	=
+		{
+			(ltcChain.state != LTC6811_CHAIN_STATE_READY) |
+			((overvoltage) << 1) |
+			((undervoltage) << 2) |
+			((false) << 3) |
+			((false) << 4) |
+			((senseLine) << 5) |
+			((selfTest) << 6)
+		}
+	};
+
+	return canTransmitTimeout (driver, CAN_ANY_MAILBOX, &frame, timeout);
+}
 
 msg_t transmitVoltageMessage (CANDriver* driver, sysinterval_t timeout, uint16_t index)
 {
@@ -53,8 +96,16 @@ msg_t transmitVoltageMessage (CANDriver* driver, sysinterval_t timeout, uint16_t
 msg_t transmitTemperatureMessage (CANDriver* driver, sysinterval_t timeout, uint16_t index)
 {
 	uint16_t temperatures [5];
+
+	// TODO(Barach): Re-enable temperatures
+	// for (uint8_t tempIndex = 0; tempIndex < 5; ++tempIndex)
+	// 	temperatures [tempIndex] = TEMPERATURE_TO_WORD (thermistors [index][tempIndex].temperature);
+
 	for (uint8_t tempIndex = 0; tempIndex < 5; ++tempIndex)
-		temperatures [tempIndex] = TEMPERATURE_TO_WORD (thermistors [index][tempIndex].temperature);
+		if (thermistors [index][tempIndex].resistance < 16380.0f)
+			temperatures [tempIndex] = thermistors [index][tempIndex].resistance / 4.0f;
+		else
+			temperatures [tempIndex] = 4095;
 
 	CANTxFrame frame =
 	{

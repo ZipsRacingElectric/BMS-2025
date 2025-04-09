@@ -21,6 +21,9 @@
 
 // Functions ------------------------------------------------------------------------------------------------------------------
 
+// TODO(Barach): Docs
+msg_t transmitStatusMessage (CANDriver* driver, sysinterval_t timeout);
+
 /**
  * @brief Transmits a cell voltage message based on the current cell voltages.
  * @param driver The CAN driver to use.

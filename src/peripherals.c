@@ -34,30 +34,34 @@ static const mc24lc32Config_t EEPROM_CONFIG =
 /// @brief Configuration for the LTC daisy chain.
 ltc6811DaisyChainConfig_t ltcChainConfig =
 {
-	.spiDriver			= &SPID1,
-	.spiConfig 			=
+	.spiDriver				= &SPID1,
+	.spiConfig 				=
 	{
-		.circular		= false,						// Linear buffer.
-		.slave			= false,						// Device is in master mode.
-		.cr1			= 0								// 2-line unidirectional, no CRC, MSB first, master mode, clock idles
-														// high, data capture on first clock transition.
-						| 0b111 << SPI_CR1_BR_Pos,		// Baudrate 328125 bps.
-		.cr2			= 0,							// Default CR2 config.
-		.data_cb		= NULL,							// No callbacks.
-		.error_cb		= NULL,							//
-		.ssport			= PAL_PORT (LINE_CS_ISOSPI),	// IsoSPI transceiver CS pin.
-		.sspad			= PAL_PAD (LINE_CS_ISOSPI)		//
+		.circular			= false,						// Linear buffer.
+		.slave				= false,						// Device is in master mode.
+		.cr1				= 0								// 2-line unidirectional, no CRC, MSB first, master mode, clock
+															// idles high, data capture on first clock transition.
+							| 0b111 << SPI_CR1_BR_Pos,		// Baudrate 328125 bps.
+		.cr2				= 0,							// Default CR2 config.
+		.data_cb			= NULL,							// No callbacks.
+		.error_cb			= NULL,							//
+		.ssport				= PAL_PORT (LINE_CS_ISOSPI),	// IsoSPI transceiver CS pin.
+		.sspad				= PAL_PAD (LINE_CS_ISOSPI)		//
 	},
-	.spiMiso			= LINE_SPI1_MISO,
-	.devices			= ltcs,
-	.deviceCount		= LTC_COUNT,
-	.readAttemptCount	= 5,
-	.cellAdcMode		= LTC6811_ADC_422HZ, // TODO(Barach): Should be 26Hz
-	.gpioAdcMode		= LTC6811_ADC_26HZ,
+	.spiMiso				= LINE_SPI1_MISO,
+	.devices				= ltcs,
+	.deviceCount			= LTC_COUNT,
+	.readAttemptCount		= 5,
+	.cellAdcMode			= LTC6811_ADC_422HZ, // TODO(Barach): Should be 26Hz
+	.gpioAdcMode			= LTC6811_ADC_26HZ,
 	.openWireTestIterations	= 4,
-	.cellVoltageMax		= 4.2,
-	.cellVoltageMin		= 2.7,
-	.gpioAdcSensors		=
+	.cellVoltageMax			= 4.0,
+	.cellVoltageMin			= 2.7,
+	.gpioAdcsRatiometric	=
+	{
+		true, true, true, true, true
+	},
+	.gpioAdcSensors			=
 	{
 		{
 			(analogSensor_t*) &thermistors [0][0],
@@ -84,7 +88,7 @@ static const thermistorPulldownConfig_t THERMISTOR_CONFIG =
 	.steinhartHartD			= 0,
 	.resistanceReference	= 10,
 	.resistancePullup		= 10000,
-	.sampleVdd				= 5000,
+	.sampleVdd				= 30000,
 	.temperatureMin			= -10,
 	.temperatureMax			= 100
 };

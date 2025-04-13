@@ -99,14 +99,14 @@ static ltc6811_t* const DAISY_CHAIN [] =
 
 static const thermistorPulldownConfig_t THERMISTOR_CONFIG =
 {
-	.steinhartHartA			= 0,
-	.steinhartHartB			= 0,
+	.steinhartHartA			= 1.1384e-3,
+	.steinhartHartB			= 2.3245e-4,
 	.steinhartHartC			= 0,
-	.steinhartHartD			= 0,
-	.resistanceReference	= 10,
+	.steinhartHartD			= 9.489e-8,
+	.resistanceReference	= 1,
 	.resistancePullup		= 10000,
 	.temperatureMin			= -10,
-	.temperatureMax			= 100
+	.temperatureMax			= 60
 };
 
 // Functions ------------------------------------------------------------------------------------------------------------------

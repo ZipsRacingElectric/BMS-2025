@@ -373,7 +373,6 @@ bool ltc6811SampleGpio (ltc6811_t* bottom)
 	// Read the auxiliary register group B
 	if (!readRegisterGroups (bottom, COMMAND_RDAUXB))
 	{
-		// TODO(Barach): State
 		stop (bottom);
 		failGpio (bottom);
 		return false;
@@ -439,7 +438,6 @@ bool ltc6811OpenWireTest (ltc6811_t* bottom)
 		// Send the pull-up command.
 		if (!writeCommand (bottom, COMMAND_ADOW (0b000, bottom->config->cellAdcMode, true, true)))
 		{
-			// TODO(Barach): State
 			stop (bottom);
 			return false;
 		}
@@ -447,7 +445,6 @@ bool ltc6811OpenWireTest (ltc6811_t* bottom)
 		// Block until complete.
 		if (!pollAdc (bottom, ADC_MODE_TIMEOUTS [bottom->config->cellAdcMode]))
 		{
-			// TODO(Barach): State
 			stop (bottom);
 			return false;
 		}
@@ -485,7 +482,6 @@ bool ltc6811OpenWireTest (ltc6811_t* bottom)
 		return false;
 	}
 
-	// TODO(Barach): If adding mutex, this needs moved.
 	stop (bottom);
 
 	// Check each device, cell-by-cell
@@ -509,12 +505,6 @@ bool ltc6811OpenWireTest (ltc6811_t* bottom)
 
 		// For wire 12, if cell 12 read 0V (1mV tolerance for noise) during pull-down, the wire is open.
 		device->openWireFaults [12] = device->cellVoltagesPulldown [11] < 0.001f && device->cellVoltagesPulldown [11] > -0.001f;
-
-		// TODO(Barach): Remove?
-		// // Update the device's overall state.
-		// for (uint8_t wireIndex = 0; wireIndex < LTC6811_CELL_COUNT + 1; ++wireIndex)
-		// 	if (device->openWireFaults [wireIndex])
-		// 		device->state = LTC6811_STATE_CELL_FAULT;
 	}
 
 	return true;
@@ -584,8 +574,6 @@ bool pollAdc (ltc6811_t* bottom, sysinterval_t timeout)
 	if (spiExchange (bottom->config->spiDriver, sizeof (tx), tx, nullBuffer) != MSG_OK)
 	{
 		spiUnselect (bottom->config->spiDriver);
-		// TODO(Barach): State
-		// bottom->state = LTC6811_CHAIN_STATE_FAILED;
 		return false;
 	}
 
@@ -937,7 +925,6 @@ void failChain (ltc6811_t* bottom)
 
 void failGpio (ltc6811_t* bottom)
 {
-	// TODO(Barach): Non-global failure is required for fault tolerance.
 	for (ltc6811_t* device = bottom; device != NULL; device = device->upperDevice)
 	{
 		for (uint16_t gpioIndex = 0; gpioIndex < LTC6811_GPIO_COUNT; ++gpioIndex)

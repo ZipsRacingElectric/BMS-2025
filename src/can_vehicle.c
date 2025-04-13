@@ -79,6 +79,8 @@ void can1TxThread (void* arg)
 
 	while (true)
 	{
+		chMtxLock (&ltcMutex);
+
 		// Status message
 		transmitStatusMessage (&CAND1, TX_THREAD_PERIOD);
 
@@ -93,6 +95,8 @@ void can1TxThread (void* arg)
 		// Sense line status messages
 		for (uint16_t index = 0; index < SENSE_LINE_STATUS_MESSAGE_COUNT; ++index)
 			transmitSenseLineStatusMessage (&CAND1, TX_THREAD_PERIOD, index);
+
+		chMtxUnlock (&ltcMutex);
 
 		chThdSleep (TX_THREAD_PERIOD);
 	}

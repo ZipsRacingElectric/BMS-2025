@@ -31,7 +31,8 @@ extern mc24lc32_t eeprom;
 extern eepromMap_t* eepromMap;
 
 extern ltc6811_t ltcs [LTC_COUNT];
-extern ltc6811DaisyChain_t ltcChain;
+extern ltc6811_t* ltcBottom;
+extern mutex_t ltcMutex;
 
 extern thermistorPulldown_t thermistors [LTC_COUNT][LTC6811_GPIO_COUNT];
 

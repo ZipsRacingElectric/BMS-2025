@@ -162,132 +162,155 @@ static bool validatePec (uint8_t* data, uint8_t dataCount, uint16_t pec);
 /**
  * @brief Wakes up all devices in an LTC6811 daisy-chain. This method guarantees all devices are in the ready or standby state,
  * regardless of the previous state of the daisy-chain.
- * @param chain The daisy-chain to wake up.
+ * @param bottom The bottom (first) device in the daisy chain.
  */
-static void wakeupSleep (ltc6811DaisyChain_t* chain);
+static void wakeupSleep (ltc6811_t* bottom);
 
 /**
  * @brief Blocks until a previously scheduled ADC conversion is completed.
- * @param chain The daisy-chain to poll.
- * @return True if all device conversions are complete, false if a timeout occurred.
+ * @param bottom The bottom (first) device in the daisy chain.
+ * @return True if all device conversions are complete, false if a timeout occurred. Timeouts may be considered a fatal error.
  */
-static bool pollAdc (ltc6811DaisyChain_t* chain, sysinterval_t timeout);
+static bool pollAdc (ltc6811_t* bottom, sysinterval_t timeout);
 
 /**
  * @brief Writes a command to each device in a chain.
- * @param chain The chain to write to.
+ * @param bottom The bottom (first) device in the daisy chain.
  * @param command The command to write.
- * @return True if successful, false otherwise.
+ * @return False if a fatal error occurred, true otherwise. A non-fatal return code does not guarantee write success.
  */
-static bool writeCommand (ltc6811DaisyChain_t* chain, uint16_t command);
+static bool writeCommand (ltc6811_t* bottom, uint16_t command);
 
 /**
  * @brief Writes to a data register group of each device in a chain.
  * @note The to written to each device should be placed into its @c tx buffer.
- * @param chain The chain to write to.
+ * @param bottom The bottom (first) device in the daisy chain.
  * @param command The write command of the register group.
- * @return True if successful, false otherwise.
+ * @return False if a fatal error occurred, true otherwise. A non-fatal return code does not guarantee write success.
  */
-static bool writeRegisterGroups (ltc6811DaisyChain_t* chain, uint16_t command);
+static bool writeRegisterGroups (ltc6811_t* bottom, uint16_t command);
 
 /**
  * @brief Reads from a data register group of each device in a chain.
  * @note The data read from each device is placed into its @c rx buffer.
- * @param chain The chain to read from.
+ * @param bottom The bottom (first) device in the daisy chain.
  * @param command The read command of the register group.
- * @return True if successful, false otherwise.
+ * @return False if a fatal error occurred, true otherwise. A non-fatal return code does not guarantee read data is valid,
+ * check individual device states to determine validity.
  */
-static bool readRegisterGroups (ltc6811DaisyChain_t* chain, uint16_t command);
+static bool readRegisterGroups (ltc6811_t* bottom, uint16_t command);
 
 /**
  * @brief Writes the chain's configuration to each device's configuration register group.
- * @param chain The chain to configure.
- * @return True if successful, false otherwise.
+ * @param bottom The bottom (first) device in the daisy chain.
+ * @return False if a fatal error occurred, true otherwise. A non-fatal return code does not guarantee write success.
  */
-static bool configure (ltc6811DaisyChain_t* chain);
+static bool configure (ltc6811_t* bottom);
 
 /**
  * @brief Samples the cell voltages of each device in a chain.
- * @param chain The chain to sample from.
+ * @param bottom The bottom (first) device in the daisy chain.
  * @param destination The destination buffer to use for each device.
- * @return True if successful, false otherwise.
+ * @return False if a fatal error occurred, true otherwise. A non-fatal return code does not guarantee read data is valid,
+ * check individual device states to determine validity
  */
-static bool sampleCells (ltc6811DaisyChain_t* chain, cellVoltageDestination_t destination);
+static bool sampleCells (ltc6811_t* bottom, cellVoltageDestination_t destination);
+
+/**
+ * @brief Sets all devices in a chain to the @c LTC6811_STATE_FAILED state.
+ * @param bottom The bottom (first) device in the daisy chain.
+ */
+static void failChain (ltc6811_t* bottom);
 
 /**
  * @brief Function to be called when a GPIO sampling operation fails. All GPIO will be put into the
  * @c ANALOG_SENSOR_FAILED state.
- * @param chain The chain to invalidate the GPIO of.
+ * @param bottom The bottom (first) device in the daisy chain.
  */
-static void failGpio (ltc6811DaisyChain_t* chain);
+static void failGpio (ltc6811_t* bottom);
 
 /**
- * @brief Acquires and starts a chain's SPI driver.
- * @param chain The chain to start the driver of.
+ * @brief Acquires and starts a daisy chain's SPI driver.
+ * @param bottom The bottom (first) device in the chain.
  */
-static inline void start (ltc6811DaisyChain_t* chain)
+static inline void start (ltc6811_t* bottom)
 {
 	// Acquire the SPI bus (if enabled)
 	#if SPI_USE_MUTUAL_EXCLUSION
-	spiAcquireBus (chain->config->spiDriver);
+	spiAcquireBus (bottom->config->spiDriver);
 	#endif // SPI_USE_MUTUAL_EXCLUSION
 
 	// Start the SPI driver
-	spiStart (chain->config->spiDriver, &chain->config->spiConfig);
+	spiStart (bottom->config->spiDriver, &bottom->config->spiConfig);
 }
 
 /**
  * @brief Stops and releases a chain's SPI driver.
- * @param chain The chain to stop the driver of.
+ * @param bottom The bottom (first) device in the daisy chain.
  */
-static inline void stop (ltc6811DaisyChain_t* chain)
+static inline void stop (ltc6811_t* bottom)
 {
 	// Stop the SPI driver
-	spiStop (chain->config->spiDriver);
+	spiStop (bottom->config->spiDriver);
 
 	// Release the SPI bus (if enabled)
 	#if SPI_USE_MUTUAL_EXCLUSION
-	spiReleaseBus (chain->config->spiDriver);
+	spiReleaseBus (bottom->config->spiDriver);
 	#endif // SPI_USE_MUTUAL_EXCLUSION
 }
 
 // Functions ------------------------------------------------------------------------------------------------------------------
 
-bool ltc6811Init (ltc6811DaisyChain_t* chain, ltc6811DaisyChainConfig_t* config)
+bool ltc6811Init (ltc6811_t* const* daisyChain, uint16_t deviceCount, const ltc6811Config_t* config)
 {
-	chain->config = config;
+	for (uint16_t index = 0; index < deviceCount; ++index)
+	{
+		// Initialize the doubly linked-list.
+		daisyChain [index]->upperDevice = (index != deviceCount - 1) ? daisyChain [index + 1] : NULL;
+		daisyChain [index]->lowerDevice = (index != 0) ? daisyChain [index - 1] : NULL;
+		daisyChain [index]->topDevice = (index == 0) ? daisyChain [deviceCount - 1] : NULL;
 
-	// Start from the ready state
-	for (uint16_t index = 0; index < chain->config->deviceCount; ++index)
-		chain->config->devices [index].state = LTC6811_STATE_READY;
-	chain->state = LTC6811_CHAIN_STATE_READY;
+		// Store the configuration in the bottom device
+		if (index == 0)
+			daisyChain [index]->config = config;
+		else
+		 	daisyChain [index]->config = NULL;
 
-	if (!configure (chain))
+		// Start from the ready state.
+		daisyChain [index]->state = LTC6811_STATE_READY;
+
+		// TODO(Barach): Not a huge fan of this.
+		for (uint8_t gpio = 0; gpio < LTC6811_GPIO_COUNT; ++gpio)
+			daisyChain [index]->gpioSensors [gpio] = config->gpioSensors [index][gpio];
+	}
+
+	if (!configure (daisyChain [0]))
 		return false;
 
-	// TODO(Barach): Config checks and sampling.
-	return ltc6811SampleCells (chain);
+	return ltc6811SampleCells (daisyChain [0]);
 }
 
-bool ltc6811SampleCells (ltc6811DaisyChain_t* chain)
+bool ltc6811SampleCells (ltc6811_t* bottom)
 {
-	start (chain);
-	wakeupSleep (chain);
+	start (bottom);
+	wakeupSleep (bottom);
 
-	if (!sampleCells (chain, CELL_VOLTAGE_DESTINATION_VOLTAGE_BUFFER))
+	// Sample the cell voltages into the cell voltage buffer.
+	if (!sampleCells (bottom, CELL_VOLTAGE_DESTINATION_VOLTAGE_BUFFER))
 	{
-		stop (chain);
+		stop (bottom);
 		return false;
 	}
 
-	// Read the status register group B
-	if (!readRegisterGroups (chain, COMMAND_RDSTATB))
+	// Read the status register group B.
+	if (!readRegisterGroups (bottom, COMMAND_RDSTATB))
 	{
-		stop (chain);
+		stop (bottom);
 		return false;
 	}
 
-	for (ltc6811_t* device = chain->config->devices; device < chain->config->devices + chain->config->deviceCount; ++device)
+	// Read each device's undervoltage / overvoltage flags.
+	for (ltc6811_t* device = bottom; device != NULL; device = device->upperDevice)
 	{
 		// STBR2
 		device->undervoltageFaults [0] = STBR2_C1UV (device->rx [2]);
@@ -320,161 +343,154 @@ bool ltc6811SampleCells (ltc6811DaisyChain_t* chain)
 		device->overvoltageFaults [11] = STBR4_C12OV (device->rx [4]);
 	}
 
-	stop (chain);
+	stop (bottom);
 	return true;
 }
 
-bool ltc6811SampleGpio (ltc6811DaisyChain_t* chain)
+bool ltc6811SampleGpio (ltc6811_t* bottom)
 {
 	// See LTC6811 datasheet section "Auxiliary (GPIO) Measurements (ADAX Command)", pg.26.
 
-	start (chain);
-	wakeupSleep (chain);
+	start (bottom);
+	wakeupSleep (bottom);
 
 	// Start the ADC measurement for all GPIO.
-	if (!writeCommand (chain, COMMAND_ADAX (chain->config->gpioAdcMode, 0b000)))
+	if (!writeCommand (bottom, COMMAND_ADAX (bottom->config->gpioAdcMode, 0b000)))
 	{
-		stop (chain);
-		failGpio (chain);
+		stop (bottom);
+		failGpio (bottom);
 		return false;
 	}
 
 	// Block until the ADC conversion is complete
-	if (!pollAdc (chain, ADC_MODE_TIMEOUTS [chain->config->gpioAdcMode]))
+	if (!pollAdc (bottom, ADC_MODE_TIMEOUTS [bottom->config->gpioAdcMode]))
 	{
-		stop (chain);
-		failGpio (chain);
+		stop (bottom);
+		failGpio (bottom);
 		return false;
 	}
 
 	// Read the auxiliary register group B
-	if (!readRegisterGroups (chain, COMMAND_RDAUXB))
+	if (!readRegisterGroups (bottom, COMMAND_RDAUXB))
 	{
-		stop (chain);
-		failGpio (chain);
+		// TODO(Barach): State
+		stop (bottom);
+		failGpio (bottom);
 		return false;
 	}
 
 	// Read GPIO 4, GPIO 5, and VREF2
-	for (uint16_t deviceIndex = 0; deviceIndex < chain->config->deviceCount; ++deviceIndex)
+	for (ltc6811_t* device = bottom; device != NULL; device = device->upperDevice)
 	{
-		ltc6811_t* device = chain->config->devices + deviceIndex;
-
 		// Store VREF2
 		device->vref2 = device->rx [5] << 8 | device->rx [4];
 
 		for (uint8_t gpioIndex = 3; gpioIndex < LTC6811_GPIO_COUNT; ++gpioIndex)
 		{
-			analogSensor_t* sensor = chain->config->gpioAdcSensors [deviceIndex][gpioIndex];
+			analogSensor_t* sensor = device->gpioSensors [gpioIndex];
 			if (sensor == NULL)
 				continue;
 
 			uint16_t sample = device->rx [gpioIndex * 2 - 5] << 8 | device->rx [gpioIndex * 2 - 6];
 
-			// Update the sensor with the last sample, scale by VREF2 if ratiometric sensors are specified.
-			if (chain->config->gpioAdcsRatiometric [gpioIndex])
-				sensor->callback (sensor, 30000.0f * sample / device->vref2);
-			else
-				sensor->callback (sensor, sample);
+			// Update the sensor with the last sample, providing VREF2 as the analog supply voltage.
+			sensor->callback (sensor, sample, device->vref2);
 		}
 	}
 
 	// Read the auxiliary register group A
-	if (!readRegisterGroups (chain, COMMAND_RDAUXA))
+	if (!readRegisterGroups (bottom, COMMAND_RDAUXA))
 	{
-		stop (chain);
-		failGpio (chain);
+		stop (bottom);
+		failGpio (bottom);
 		return false;
 	}
 
 	// Read GPIO 1 to 3
-	for (uint16_t deviceIndex = 0; deviceIndex < chain->config->deviceCount; ++deviceIndex)
+	for (ltc6811_t* device = bottom; device != NULL; device = device->upperDevice)
 	{
-		ltc6811_t* device = chain->config->devices + deviceIndex;
-
 		for (uint8_t gpioIndex = 0; gpioIndex < 3; ++gpioIndex)
 		{
-			analogSensor_t* sensor = chain->config->gpioAdcSensors [deviceIndex][gpioIndex];
+			analogSensor_t* sensor = device->gpioSensors [gpioIndex];
 			if (sensor == NULL)
 				continue;
 
 			uint16_t sample = device->rx [gpioIndex * 2 + 1] << 8 | device->rx [gpioIndex * 2];
 
-			// Update the sensor with the last sample, scale by VREF2 if ratiometric sensors are specified.
-			if (chain->config->gpioAdcsRatiometric [gpioIndex])
-				sensor->callback (sensor, 30000.0f * sample / device->vref2);
-			else
-				sensor->callback (sensor, sample);
+			// Update the sensor with the last sample, providing VREF2 as the analog supply voltage.
+			sensor->callback (sensor, sample, device->vref2);
 		}
 	}
 
-	stop (chain);
+	stop (bottom);
 	return true;
 }
 
-bool ltc6811OpenWireTest (ltc6811DaisyChain_t* chain)
+bool ltc6811OpenWireTest (ltc6811_t* bottom)
 {
 	// See LTC6811 datasheet section "Open Wire Check (ADOW Command)", pg.34.
 
-	start (chain);
-	wakeupSleep (chain);
+	start (bottom);
+	wakeupSleep (bottom);
 
 	// Pull-up measurement
-	for (uint8_t index = 0; index < chain->config->openWireTestIterations; ++index)
+	for (uint8_t index = 0; index < bottom->config->openWireTestIterations; ++index)
 	{
 		// Send the pull-up command.
-		if (!writeCommand (chain, COMMAND_ADOW (0b000, chain->config->cellAdcMode, true, true)))
+		if (!writeCommand (bottom, COMMAND_ADOW (0b000, bottom->config->cellAdcMode, true, true)))
 		{
-			stop (chain);
+			// TODO(Barach): State
+			stop (bottom);
 			return false;
 		}
 
 		// Block until complete.
-		if (!pollAdc (chain, ADC_MODE_TIMEOUTS [chain->config->cellAdcMode]))
+		if (!pollAdc (bottom, ADC_MODE_TIMEOUTS [bottom->config->cellAdcMode]))
 		{
-			stop (chain);
+			// TODO(Barach): State
+			stop (bottom);
 			return false;
 		}
 	}
 
 	// Sample the cell voltages into the pull-up buffer.
-	if (!sampleCells (chain, CELL_VOLTAGE_DESTINATION_PULLUP_BUFFER))
+	if (!sampleCells (bottom, CELL_VOLTAGE_DESTINATION_PULLUP_BUFFER))
 	{
-		stop (chain);
+		stop (bottom);
 		return false;
 	}
 
 	// Pull-down measurement
-	for (uint8_t index = 0; index < chain->config->openWireTestIterations; ++index)
+	for (uint8_t index = 0; index < bottom->config->openWireTestIterations; ++index)
 	{
 		// Send the pull-down command.
-		if (!writeCommand (chain, COMMAND_ADOW (0b000, chain->config->cellAdcMode, true, false)))
+		if (!writeCommand (bottom, COMMAND_ADOW (0b000, bottom->config->cellAdcMode, true, false)))
 		{
-			stop (chain);
+			stop (bottom);
 			return false;
 		}
 
 		// Block until complete.
-		if (!pollAdc (chain, ADC_MODE_TIMEOUTS [chain->config->cellAdcMode]))
+		if (!pollAdc (bottom, ADC_MODE_TIMEOUTS [bottom->config->cellAdcMode]))
 		{
-			stop (chain);
+			stop (bottom);
 			return false;
 		}
 	}
 
 	// Sample the cell voltages into the pull-down buffer.
-	if (!sampleCells (chain, CELL_VOLTAGE_DESTINATION_PULLDOWN_BUFFER))
+	if (!sampleCells (bottom, CELL_VOLTAGE_DESTINATION_PULLDOWN_BUFFER))
 	{
-		stop (chain);
+		stop (bottom);
 		return false;
 	}
 
 	// TODO(Barach): If adding mutex, this needs moved.
-	stop (chain);
+	stop (bottom);
 
 	// Check each device, cell-by-cell
 	// Note that in the datasheet, sense wires are indexed 0 to 12 while cells are indexed 1 to 12.
-	for (ltc6811_t* device = chain->config->devices; device < chain->config->devices + chain->config->deviceCount; ++device)
+	for (ltc6811_t* device = bottom; device != NULL; device = device->upperDevice)
 	{
 		// For wire 0, if cell 1 read 0V (1mV tolerance for noise) during pull-up, the wire is open.
 		device->openWireFaults [0] = device->cellVoltagesPullup [0] < 0.001f && device->cellVoltagesPullup [0] > -0.001f;
@@ -494,10 +510,11 @@ bool ltc6811OpenWireTest (ltc6811DaisyChain_t* chain)
 		// For wire 12, if cell 12 read 0V (1mV tolerance for noise) during pull-down, the wire is open.
 		device->openWireFaults [12] = device->cellVoltagesPulldown [11] < 0.001f && device->cellVoltagesPulldown [11] > -0.001f;
 
-		// Update the device's overall state.
-		for (uint8_t wireIndex = 0; wireIndex < LTC6811_CELL_COUNT + 1; ++wireIndex)
-			if (device->openWireFaults [wireIndex])
-				device->state = LTC6811_STATE_CELL_FAULT;
+		// TODO(Barach): Remove?
+		// // Update the device's overall state.
+		// for (uint8_t wireIndex = 0; wireIndex < LTC6811_CELL_COUNT + 1; ++wireIndex)
+		// 	if (device->openWireFaults [wireIndex])
+		// 		device->state = LTC6811_STATE_CELL_FAULT;
 	}
 
 	return true;
@@ -531,7 +548,7 @@ bool validatePec (uint8_t* data, uint8_t dataCount, uint16_t pec)
 	return pec == actualPec;
 }
 
-void wakeupSleep (ltc6811DaisyChain_t* chain)
+void wakeupSleep (ltc6811_t* bottom)
 {
 	// Sends a wakeup signal using the algorithm described in "Waking a Daisy Chain - Method 2"
 	// See LTC6811 datasheet, pg.52 for more info.
@@ -540,19 +557,19 @@ void wakeupSleep (ltc6811DaisyChain_t* chain)
 	// it receives, rather it will wake up and enter the ready state. Once said device is in the ready state, it will propogate
 	// the next signal it receives. By sending N signals, we are allowing the first N - 1 devices to not propogate the first
 	// signal they receive, in turn guaranteeing that all N devices will receive at least 1 signal.
-	for (uint16_t index = 0; index < chain->config->deviceCount; ++index)
+	for (ltc6811_t* device = bottom; device != NULL; device = device->upperDevice)
 	{
 		// Drive CS low for the maximum wakeup time (guarantees this device will wake).
-		spiSelect (chain->config->spiDriver);
+		spiSelect (bottom->config->spiDriver);
 		chThdSleep (T_WAKE_MAX);
 
 		// Release CS and allow the device to enter the ready state.
-		spiUnselect (chain->config->spiDriver);
+		spiUnselect (bottom->config->spiDriver);
 		chThdSleep (T_READY_MAX);
 	}
 }
 
-bool pollAdc (ltc6811DaisyChain_t* chain, sysinterval_t timeout)
+bool pollAdc (ltc6811_t* bottom, sysinterval_t timeout)
 {
 	// TODO(Barach): This should use the writeCommand function.
 
@@ -562,19 +579,20 @@ bool pollAdc (ltc6811DaisyChain_t* chain, sysinterval_t timeout)
 	tx [2] = pec >> 8;
 	tx [3] = pec;
 
-	spiSelect (chain->config->spiDriver);
+	spiSelect (bottom->config->spiDriver);
 
-	if (spiExchange (chain->config->spiDriver, sizeof (tx), tx, nullBuffer) != MSG_OK)
+	if (spiExchange (bottom->config->spiDriver, sizeof (tx), tx, nullBuffer) != MSG_OK)
 	{
-		spiUnselect (chain->config->spiDriver);
-		chain->state = LTC6811_CHAIN_STATE_FAILED;
+		spiUnselect (bottom->config->spiDriver);
+		// TODO(Barach): State
+		// bottom->state = LTC6811_CHAIN_STATE_FAILED;
 		return false;
 	}
 
 	// If the conversion has already finished, exit early.
-	if (palReadLine (chain->config->spiMiso))
+	if (palReadLine (bottom->config->spiMiso))
 	{
-		spiUnselect (chain->config->spiDriver);
+		spiUnselect (bottom->config->spiDriver);
 		return true;
 	}
 
@@ -593,7 +611,7 @@ bool pollAdc (ltc6811DaisyChain_t* chain, sysinterval_t timeout)
 	// return result;
 }
 
-bool writeCommand (ltc6811DaisyChain_t* chain, uint16_t command)
+bool writeCommand (ltc6811_t* bottom, uint16_t command)
 {
 	// Transmit Frame:
 	//  0            1            2        3
@@ -607,21 +625,21 @@ bool writeCommand (ltc6811DaisyChain_t* chain, uint16_t command)
 	tx [2] = pec >> 8;
 	tx [3] = pec;
 
-	spiSelect (chain->config->spiDriver);
+	spiSelect (bottom->config->spiDriver);
 
-	if (spiExchange (chain->config->spiDriver, sizeof (tx), tx, nullBuffer) != MSG_OK)
+	if (spiExchange (bottom->config->spiDriver, sizeof (tx), tx, nullBuffer) != MSG_OK)
 	{
-		spiUnselect (chain->config->spiDriver);
-		chain->state = LTC6811_CHAIN_STATE_FAILED;
+		spiUnselect (bottom->config->spiDriver);
+		failChain (bottom);
 		return false;
 	}
 
-	spiUnselect (chain->config->spiDriver);
+	spiUnselect (bottom->config->spiDriver);
 
 	return true;
 }
 
-bool writeRegisterGroups (ltc6811DaisyChain_t* chain, uint16_t command)
+bool writeRegisterGroups (ltc6811_t* bottom, uint16_t command)
 {
 	// Transmit Frame:
 	//  0            1            2        3
@@ -644,38 +662,39 @@ bool writeRegisterGroups (ltc6811DaisyChain_t* chain, uint16_t command)
 	tx [2] = pec >> 8;
 	tx [3] = pec;
 
-	spiSelect (chain->config->spiDriver);
+	spiSelect (bottom->config->spiDriver);
 
-	if (spiExchange (chain->config->spiDriver, sizeof (tx), tx, nullBuffer) != MSG_OK)
+	if (spiExchange (bottom->config->spiDriver, sizeof (tx), tx, nullBuffer) != MSG_OK)
 	{
-		spiUnselect (chain->config->spiDriver);
-		chain->state = LTC6811_CHAIN_STATE_FAILED;
+		spiUnselect (bottom->config->spiDriver);
+		failChain (bottom);
 		return false;
 	}
 
 	// Write each individual device's register group.
 	// Note the first written data goes to the last device in the stack (device N-1).
-	for (int16_t index = chain->config->deviceCount - 1; index >= 0; --index)
+	for (ltc6811_t* device = bottom->topDevice; device != NULL; device = device->lowerDevice)
 	{
-		pec = calculatePec (chain->config->devices [index].tx, LTC6811_BUFFER_SIZE - sizeof(uint16_t));
-		chain->config->devices [index].tx [LTC6811_BUFFER_SIZE - 2] = pec >> 8;
-		chain->config->devices [index].tx [LTC6811_BUFFER_SIZE - 1] = pec;
+		pec = calculatePec (device->tx, LTC6811_BUFFER_SIZE - sizeof(uint16_t));
+		device->tx [LTC6811_BUFFER_SIZE - 2] = pec >> 8;
+		device->tx [LTC6811_BUFFER_SIZE - 1] = pec;
 
-		if (spiExchange (chain->config->spiDriver, LTC6811_BUFFER_SIZE, chain->config->devices [index].tx, nullBuffer)
+		// TODO(Barach): Null buffer is non-reentrant?
+		if (spiExchange (bottom->config->spiDriver, LTC6811_BUFFER_SIZE, device->tx, nullBuffer)
 			!= MSG_OK)
 		{
-			spiUnselect (chain->config->spiDriver);
-			chain->state = LTC6811_CHAIN_STATE_FAILED;
+			spiUnselect (bottom->config->spiDriver);
+			failChain (bottom);
 			return false;
 		}
 	}
 
-	spiUnselect (chain->config->spiDriver);
+	spiUnselect (bottom->config->spiDriver);
 
 	return true;
 }
 
-bool readRegisterGroups (ltc6811DaisyChain_t* chain, uint16_t command)
+bool readRegisterGroups (ltc6811_t* bottom, uint16_t command)
 {
 	// See LTC6811 datasheet, pg.58 for more info.
 
@@ -696,7 +715,7 @@ bool readRegisterGroups (ltc6811DaisyChain_t* chain, uint16_t command)
 	// -------------------------------------------------------------------
 	// Where bytes [8, 15] are repeated up to device N-1.
 
-	for (uint16_t attempt = 0; attempt < chain->config->readAttemptCount; ++attempt)
+	for (uint16_t attempt = 0; attempt < bottom->config->readAttemptCount; ++attempt)
 	{
 		// TODO(Barach): The control of this is messy.
 
@@ -706,115 +725,95 @@ bool readRegisterGroups (ltc6811DaisyChain_t* chain, uint16_t command)
 		tx [2] = pec >> 8;
 		tx [3] = pec;
 
-		spiSelect (chain->config->spiDriver);
+		spiSelect (bottom->config->spiDriver);
 
-		if (spiExchange (chain->config->spiDriver, sizeof (tx), tx, nullBuffer) != MSG_OK)
+		// TODO(Barach): Null buffer is nonreentrant?
+		if (spiExchange (bottom->config->spiDriver, sizeof (tx), tx, nullBuffer) != MSG_OK)
 		{
 			// If a SPI error occurs, something has failed inside the STM, re-attempting will not help.
-			spiUnselect (chain->config->spiDriver);
-			chain->state = LTC6811_CHAIN_STATE_FAILED;
+			spiUnselect (bottom->config->spiDriver);
+			failChain (bottom);
 			return false;
 		}
 
 		// Read each individual device's register group.
 		// Note the first read data comes from the first device in the stack (device 0).
-		for (uint16_t index = 0; index < chain->config->deviceCount; ++index)
+		for (ltc6811_t* device = bottom; device != NULL; device = device->upperDevice)
 		{
-			if (spiExchange (chain->config->spiDriver, LTC6811_BUFFER_SIZE, nullBuffer, chain->config->devices [index].rx)
+			if (spiExchange (bottom->config->spiDriver, LTC6811_BUFFER_SIZE, nullBuffer, device->rx)
 				!= MSG_OK)
 			{
 				// If a SPI error occurs, something has failed inside the STM, re-attempting will not help.
-				spiUnselect (chain->config->spiDriver);
-				chain->state = LTC6811_CHAIN_STATE_FAILED;
+				spiUnselect (device->config->spiDriver);
+				failChain (bottom);
 				return false;
 			}
 		}
 
-		spiUnselect (chain->config->spiDriver);
+		spiUnselect (bottom->config->spiDriver);
 
 		// Validate the PEC of each device's frame.
-		bool result = true;
-		for (uint16_t index = 0; index < chain->config->deviceCount; ++index)
+		for (ltc6811_t* device = bottom; device != NULL; device = device->upperDevice)
 		{
-			pec = chain->config->devices [index].rx [LTC6811_BUFFER_SIZE - 1] |
-				(chain->config->devices [index].rx [LTC6811_BUFFER_SIZE - 2] << 8);
+			pec = device->rx [LTC6811_BUFFER_SIZE - 1] | (device->rx [LTC6811_BUFFER_SIZE - 2] << 8);
 
-			if (!validatePec (chain->config->devices [index].rx, LTC6811_BUFFER_SIZE - 2, pec))
+			if (!validatePec (device->rx, LTC6811_BUFFER_SIZE - sizeof (uint16_t), pec))
 			{
-				result = false;
-
 				// If this is not the last attempt, re-attempt the entire operation.
-				if (attempt != chain->config->readAttemptCount - 1)
+				if (attempt != bottom->config->readAttemptCount - 1)
 					break;
 
 				// If this is the last attempt, fail the device and continue checking the others.
-				chain->config->devices [index].state = LTC6811_STATE_PEC_ERROR;
-				chain->state = LTC6811_CHAIN_STATE_FAILED;
+				device->state = LTC6811_STATE_PEC_ERROR;
 			}
 		}
-
-		// If each device's PEC was valid, success.
-		if (result)
-			return true;
 	}
 
-	// Last attempt failed, fail the whole operation.
-	return false;
+	return true;
 }
 
-bool configure (ltc6811DaisyChain_t* chain)
+bool configure (ltc6811_t* bottom)
 {
-	start (chain);
-	wakeupSleep (chain);
+	start (bottom);
+	wakeupSleep (bottom);
 
-	// // Write the configuration register group
-	// for (uint16_t index = 0; index < chain->config->deviceCount; ++index)
-	// {
-	// 	chain->config->devices [index].tx [0] = 0b11111000; // GPIO high impedence, ref disabled outside conversion, ADC option 0
-	// 	chain->config->devices [index].tx [1] = 0b00000000; // VUV = 0V
-	// 	chain->config->devices [index].tx [2] = 0b00000000; // VOV = 0V
-	// 	chain->config->devices [index].tx [3] = 0b00000000; //
-	// 	chain->config->devices [index].tx [4] = 0b00000000; // No discharging
-	// 	chain->config->devices [index].tx [5] = 0b00000000; // No discharge timeout
-	// }
-
-	// Write the configuration register group
-	for (uint16_t index = 0; index < chain->config->deviceCount; ++index)
+	// Write the configuration register group A
+	for (ltc6811_t* device = bottom; device != NULL; device = device->upperDevice)
 	{
 		// GPIO set to high impedence, reference disabled outside conversion, ADC option 0.
-		chain->config->devices [index].tx [0] = CFGR0 (1, 1, 1, 1, 1, 0, 0);
+		device->tx [0] = CFGR0 (1, 1, 1, 1, 1, 0, 0);
 
 		// Undervoltage / overvoltage values.
-		chain->config->devices [index].tx [1] = CFGR1 (chain->config->cellVoltageMin);
-		chain->config->devices [index].tx [2] = CFGR2 (chain->config->cellVoltageMin, chain->config->cellVoltageMax);
-		chain->config->devices [index].tx [3] = CFGR3 (chain->config->cellVoltageMax);
+		device->tx [1] = CFGR1 (bottom->config->cellVoltageMin);
+		device->tx [2] = CFGR2 (bottom->config->cellVoltageMin, bottom->config->cellVoltageMax);
+		device->tx [3] = CFGR3 (bottom->config->cellVoltageMax);
 
 		// No discharging or discharge timeout.
-		chain->config->devices [index].tx [4] = CFGR4 (0, 0, 0, 0, 0, 0, 0, 0);
-		chain->config->devices [index].tx [5] = CFGR5 (chain->config->dischargeTimeout, 0, 0, 0, 0);
+		device->tx [4] = CFGR4 (0, 0, 0, 0, 0, 0, 0, 0);
+		device->tx [5] = CFGR5 (bottom->config->dischargeTimeout, 0, 0, 0, 0);
 	}
 
-	bool result = writeRegisterGroups (chain, COMMAND_WRCFGA);
+	bool result = writeRegisterGroups (bottom, COMMAND_WRCFGA);
 
-	stop (chain);
+	stop (bottom);
 	return result;
 }
 
-bool sampleCells (ltc6811DaisyChain_t* chain, cellVoltageDestination_t destination)
+bool sampleCells (ltc6811_t* bottom, cellVoltageDestination_t destination)
 {
 	// See LTC6811 datasheet section "Measuring Cell Voltages (ADCV Command)", pg.25.
 
 	// Start the cell voltage conversion for all cells, permitting discharge.
-	if (!writeCommand (chain, COMMAND_ADCV (chain->config->cellAdcMode, true, 0b000)))
+	if (!writeCommand (bottom, COMMAND_ADCV (bottom->config->cellAdcMode, true, 0b000)))
 		return false;
 
-	if (!pollAdc (chain, ADC_MODE_TIMEOUTS [chain->config->cellAdcMode]))
+	if (!pollAdc (bottom, ADC_MODE_TIMEOUTS [bottom->config->cellAdcMode]))
 		return false;
 
-	if (!readRegisterGroups (chain, COMMAND_RDCVA))
+	if (!readRegisterGroups (bottom, COMMAND_RDCVA))
 		return false;
 
-	for (ltc6811_t* device = chain->config->devices; device < chain->config->devices + chain->config->deviceCount; ++device)
+	for (ltc6811_t* device = bottom; device != NULL; device = device->upperDevice)
 	{
 		float cell0 = WORD_TO_CELL_VOLTAGE ((device->rx [1] << 8) | device->rx [0]);
 		float cell1 = WORD_TO_CELL_VOLTAGE ((device->rx [3] << 8) | device->rx [2]);
@@ -840,10 +839,10 @@ bool sampleCells (ltc6811DaisyChain_t* chain, cellVoltageDestination_t destinati
 		}
 	}
 
-	if (!readRegisterGroups (chain, COMMAND_RDCVB))
+	if (!readRegisterGroups (bottom, COMMAND_RDCVB))
 		return false;
 
-	for (ltc6811_t* device = chain->config->devices; device < chain->config->devices + chain->config->deviceCount; ++device)
+	for (ltc6811_t* device = bottom; device != NULL; device = device->upperDevice)
 	{
 		float cell3 = WORD_TO_CELL_VOLTAGE ((device->rx [1] << 8) | device->rx [0]);
 		float cell4 = WORD_TO_CELL_VOLTAGE ((device->rx [3] << 8) | device->rx [2]);
@@ -869,10 +868,10 @@ bool sampleCells (ltc6811DaisyChain_t* chain, cellVoltageDestination_t destinati
 		}
 	}
 
-	if (!readRegisterGroups (chain, COMMAND_RDCVC))
+	if (!readRegisterGroups (bottom, COMMAND_RDCVC))
 		return false;
 
-	for (ltc6811_t* device = chain->config->devices; device < chain->config->devices + chain->config->deviceCount; ++device)
+	for (ltc6811_t* device = bottom; device != NULL; device = device->upperDevice)
 	{
 		float cell6 = WORD_TO_CELL_VOLTAGE ((device->rx [1] << 8) | device->rx [0]);
 		float cell7 = WORD_TO_CELL_VOLTAGE ((device->rx [3] << 8) | device->rx [2]);
@@ -898,10 +897,10 @@ bool sampleCells (ltc6811DaisyChain_t* chain, cellVoltageDestination_t destinati
 		}
 	}
 
-	if (!readRegisterGroups (chain, COMMAND_RDCVD))
+	if (!readRegisterGroups (bottom, COMMAND_RDCVD))
 		return false;
 
-	for (ltc6811_t* device = chain->config->devices; device < chain->config->devices + chain->config->deviceCount; ++device)
+	for (ltc6811_t* device = bottom; device != NULL; device = device->upperDevice)
 	{
 		float cell9 = WORD_TO_CELL_VOLTAGE ((device->rx [1] << 8) | device->rx [0]);
 		float cell10 = WORD_TO_CELL_VOLTAGE ((device->rx [3] << 8) | device->rx [2]);
@@ -930,13 +929,20 @@ bool sampleCells (ltc6811DaisyChain_t* chain, cellVoltageDestination_t destinati
 	return true;
 }
 
-void failGpio (ltc6811DaisyChain_t* chain)
+void failChain (ltc6811_t* bottom)
 {
-	for (uint16_t deviceIndex = 0; deviceIndex < chain->config->deviceCount; ++deviceIndex)
+	for (ltc6811_t* device = bottom; device != NULL; device = device->upperDevice)
+		device->state = LTC6811_STATE_FAILED;
+}
+
+void failGpio (ltc6811_t* bottom)
+{
+	// TODO(Barach): Non-global failure is required for fault tolerance.
+	for (ltc6811_t* device = bottom; device != NULL; device = device->upperDevice)
 	{
 		for (uint16_t gpioIndex = 0; gpioIndex < LTC6811_GPIO_COUNT; ++gpioIndex)
 		{
-			analogSensor_t* sensor = chain->config->gpioAdcSensors [deviceIndex][gpioIndex];
+			analogSensor_t* sensor = device->gpioSensors [gpioIndex];
 			if (sensor != NULL)
 				sensor->state = ANALOG_SENSOR_FAILED;
 		}

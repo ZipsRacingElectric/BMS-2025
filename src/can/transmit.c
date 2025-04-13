@@ -22,55 +22,64 @@
 
 msg_t transmitStatusMessage (CANDriver* driver, sysinterval_t timeout)
 {
-	bool overvoltage = false;
-	for (uint16_t ltcIndex = 0; ltcIndex < LTC_COUNT; ++ltcIndex)
-		for (uint8_t cellIndex = 0; cellIndex < LTC6811_CELL_COUNT; ++cellIndex)
-			if (ltcs [ltcIndex].overvoltageFaults [cellIndex])
-				overvoltage = true;
+	bool undervoltage = ltc6811UndervoltageFault (ltcBottom);
+	bool overvoltage = ltc6811OvervoltageFault (ltcBottom);
+	bool senseLine = ltc6811OpenWireFault (ltcBottom);
+	bool isoSpi = ltc6811IsospiFault (ltcBottom);
+	bool selfTest = ltc6811SelfTestFault (ltcBottom);
 
-	bool undervoltage = false;
+	bool undertemperature = false;
 	for (uint16_t ltcIndex = 0; ltcIndex < LTC_COUNT; ++ltcIndex)
-		for (uint8_t cellIndex = 0; cellIndex < LTC6811_CELL_COUNT; ++cellIndex)
-			if (ltcs [ltcIndex].undervoltageFaults [cellIndex])
-				undervoltage = true;
+		for (uint16_t thermistorIndex = 0; thermistorIndex < LTC6811_GPIO_COUNT; ++thermistorIndex)
+			undertemperature |= thermistors [ltcIndex][thermistorIndex].undertemperatureFault;
 
-	bool senseLine = false;
+	bool overtemperature = false;
 	for (uint16_t ltcIndex = 0; ltcIndex < LTC_COUNT; ++ltcIndex)
-		for (uint8_t cellIndex = 0; cellIndex < LTC6811_CELL_COUNT + 1; ++cellIndex)
-			if (ltcs [ltcIndex].openWireFaults [cellIndex])
-				senseLine = true;
-
-	bool selfTest = false;
+		for (uint16_t thermistorIndex = 0; thermistorIndex < LTC6811_GPIO_COUNT; ++thermistorIndex)
+			overtemperature |= thermistors [ltcIndex][thermistorIndex].overtemperatureFault;
 
 	CANTxFrame frame =
 	{
-		.DLC	= 1,
+		.DLC	= 6,
 		.IDE	= CAN_IDE_STD,
 		.SID	= STATUS_MESSAGE_ID,
 		.data8	=
 		{
-			(ltcChain.state != LTC6811_CHAIN_STATE_READY) |
-			((overvoltage) << 1) |
-			((undervoltage) << 2) |
-			((false) << 3) |
-			((false) << 4) |
-			((senseLine) << 5) |
-			((selfTest) << 6)
+			undervoltage |
+			(overvoltage << 1) |
+			(undertemperature << 2) |
+			(overtemperature << 3) |
+			(senseLine << 4) |
+			(isoSpi << 5) |
+			(selfTest << 6)
 		}
 	};
+
+	// IsoSPI faults
+	for (uint8_t index = 0; index < LTC_COUNT; ++index)
+		frame.data16 [1] |= (ltcs [index].state == LTC6811_STATE_FAILED || ltcs [index].state == LTC6811_STATE_PEC_ERROR) << index;
+
+	// Self test faults
+	for (uint8_t index = 0; index < LTC_COUNT; ++index)
+		frame.data16 [2] |= (ltcs [index].state == LTC6811_STATE_SELF_TEST_FAULT) << index;
 
 	return canTransmitTimeout (driver, CAN_ANY_MAILBOX, &frame, timeout);
 }
 
 msg_t transmitVoltageMessage (CANDriver* driver, sysinterval_t timeout, uint16_t index)
 {
-	// TODO(Barach): Remap to in-order.
 	uint16_t ltcIndex = index / 2;
 	uint8_t voltOffset = (index % 2) * 6;
 
 	uint16_t voltages [6];
+	bool undervoltage = false;
+	bool overvoltage = false;
 	for (uint8_t voltIndex = 0; voltIndex < 6; ++voltIndex)
+	{
 		voltages [voltIndex] = VOLTAGE_TO_WORD (ltcs [ltcIndex].cellVoltages [voltOffset + voltIndex]);
+		undervoltage |= ltcs [ltcIndex].undervoltageFaults [voltOffset + voltIndex];
+		overvoltage |= ltcs [ltcIndex].overvoltageFaults [voltOffset + voltIndex];
+	}
 
 	CANTxFrame frame =
 	{
@@ -86,7 +95,7 @@ msg_t transmitVoltageMessage (CANDriver* driver, sysinterval_t timeout, uint16_t
 			voltages [3] >> 2,
 			voltages [4],
 			(voltages [5] << 2) | ((voltages [4] >> 8) & 0b11),
-			(voltages [5] >> 6) & 0b1111
+			(overvoltage << 5) | (undervoltage << 4) | ((voltages [5] >> 6) & 0b1111)
 		}
 	};
 
@@ -101,11 +110,18 @@ msg_t transmitTemperatureMessage (CANDriver* driver, sysinterval_t timeout, uint
 	// for (uint8_t tempIndex = 0; tempIndex < 5; ++tempIndex)
 	// 	temperatures [tempIndex] = TEMPERATURE_TO_WORD (thermistors [index][tempIndex].temperature);
 
+	bool undertemperature = false;
+	bool overtemperature = false;
 	for (uint8_t tempIndex = 0; tempIndex < 5; ++tempIndex)
+	{
 		if (thermistors [index][tempIndex].resistance < 16380.0f)
 			temperatures [tempIndex] = thermistors [index][tempIndex].resistance / 4.0f;
 		else
 			temperatures [tempIndex] = 4095;
+
+		undertemperature |= thermistors [index][tempIndex].undertemperatureFault;
+		overtemperature |= thermistors [index][tempIndex].overtemperatureFault;
+	}
 
 	CANTxFrame frame =
 	{
@@ -121,7 +137,7 @@ msg_t transmitTemperatureMessage (CANDriver* driver, sysinterval_t timeout, uint
 			(temperatures [3] << 4) | ((temperatures [2] >> 8) & 0b1111),
 			temperatures [3] >> 4,
 			temperatures [4],
-			(temperatures [4] >> 8) & 0b1111
+			(overtemperature << 5) | (undertemperature << 4) | ((temperatures [4] >> 8) & 0b1111)
 		}
 	};
 
@@ -130,8 +146,6 @@ msg_t transmitTemperatureMessage (CANDriver* driver, sysinterval_t timeout, uint
 
 msg_t transmitSenseLineStatusMessage (CANDriver* driver, sysinterval_t timeout, uint16_t index)
 {
-	// TODO(Barach): Mapping
-
 	uint16_t ltcIndex = index * 4;
 
 	CANTxFrame frame =

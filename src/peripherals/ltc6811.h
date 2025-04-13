@@ -62,44 +62,20 @@ typedef enum
 
 typedef enum
 {
-	/// @brief Indicates a packet with an incorrect PEC was received. All other information about the device is void.
-	LTC6811_STATE_PEC_ERROR = 0,
+	/// @brief Indicates a hardware error has occurred. All other information about the device is void.
+	LTC6811_STATE_FAILED = 0,
 
-	/// @brief Indicates one or more cell voltages are not valid. Check @c overvoltageFaults , @c undervoltageFaults ,
-	/// and @c openWireFaults for more details.
-	LTC6811_STATE_CELL_FAULT = 1,
+	/// @brief Indicates a packet with an incorrect PEC was received. All other information about the device is void.
+	LTC6811_STATE_PEC_ERROR = 1,
 
 	/// @brief Indicates the device's multiplexor self test failed. All ADC measurements are void.
 	LTC6811_STATE_SELF_TEST_FAULT = 2,
 
-	/// @brief Indicates the device is operating normally.
+	/// @brief Indicates the device is operating normally. Note that this does not mean cell voltages are valid or nominal,
+	/// simply that they have been read correctly. For information about cell validities, see @c overvoltageFaults ,
+	/// @c undervoltageFaults , and @c openWireFaults .
 	LTC6811_STATE_READY = 3
 } ltc6811State_t;
-
-typedef enum
-{
-	LTC6811_CHAIN_STATE_FAILED	= 0,
-	LTC6811_CHAIN_STATE_READY	= 1,
-} ltc6811ChainState_t;
-
-typedef struct
-{
-	ltc6811State_t state;
-
-	float cellVoltages [LTC6811_CELL_COUNT];
-	float cellVoltagesPullup [LTC6811_CELL_COUNT];
-	float cellVoltagesPulldown [LTC6811_CELL_COUNT];
-	float cellVoltagesDelta [LTC6811_CELL_COUNT];
-
-	bool overvoltageFaults [LTC6811_CELL_COUNT];
-	bool undervoltageFaults [LTC6811_CELL_COUNT];
-	bool openWireFaults [LTC6811_CELL_COUNT + 1];
-
-	uint8_t tx [LTC6811_BUFFER_SIZE];
-	uint8_t rx [LTC6811_BUFFER_SIZE];
-
-	uint16_t vref2;
-} ltc6811_t;
 
 typedef struct
 {
@@ -111,12 +87,6 @@ typedef struct
 
 	/// @brief The MISO line of the SPI bus.
 	ioline_t spiMiso;
-
-	/// @brief The array of @c ltc6811_t devices forming the daisy chain. No need to initialize the elements.
-	ltc6811_t* devices;
-
-	/// @brief The number of devices in the daisy chain, size of @c devices .
-	uint16_t deviceCount;
 
 	/// @brief The number of times to attempt a read operation before failing.
 	uint16_t readAttemptCount;
@@ -134,35 +104,139 @@ typedef struct
 	/// determined through testing, but cannot be less than 2.
 	uint8_t openWireTestIterations;
 
-	/// @brief The minimum plausible cell voltage measurement, any lower indicates a fault condition.
+	/// @brief The minimum plausible cell voltage measurement, any lower indicates an undervoltage condition.
 	float cellVoltageMin;
 
-	/// @brief The maximum plausible cell voltage measurement, any higher indicates a fault condition.
+	/// @brief The maximum plausible cell voltage measurement, any higher indicates an overvoltage condition.
 	float cellVoltageMax;
-
-	/// @brief Indicates whether each GPIO ADC sensor is ratiometric with respect to VREF2. If true, samples will be scaled from
-	// [0, 30000), where 30000 => VREF2.
-	bool gpioAdcsRatiometric [LTC6811_GPIO_COUNT];
 
 	/// @brief Multidimensional array of analog sensors to call upon sampling each device's GPIO. Must be size
 	/// [ @c deviceCount ][ @c LTC6811_GPIO_COUNT ].
-	analogSensor_t* gpioAdcSensors [][LTC6811_GPIO_COUNT];
-} ltc6811DaisyChainConfig_t;
+	analogSensor_t* gpioSensors [][LTC6811_GPIO_COUNT];
+} ltc6811Config_t;
 
-typedef struct
+struct ltc6811
 {
-	ltc6811ChainState_t			state;
-	ltc6811DaisyChainConfig_t*	config;
-} ltc6811DaisyChain_t;
+	// Doubly-linked list references.
+	struct ltc6811* upperDevice;
+	struct ltc6811* lowerDevice;
+	struct ltc6811* topDevice;
+
+	// Daisy chain configuration
+	const ltc6811Config_t* config;
+
+	// Per-device configuration
+	analogSensor_t* gpioSensors [LTC6811_GPIO_COUNT];
+
+	// Device state
+	ltc6811State_t state;
+
+	// ADC measurements
+	float cellVoltages [LTC6811_CELL_COUNT];
+	float cellVoltagesPullup [LTC6811_CELL_COUNT];
+	float cellVoltagesPulldown [LTC6811_CELL_COUNT];
+	float cellVoltagesDelta [LTC6811_CELL_COUNT];
+	uint16_t vref2;
+
+	// Fault conditions
+	bool overvoltageFaults [LTC6811_CELL_COUNT];
+	bool undervoltageFaults [LTC6811_CELL_COUNT];
+	bool openWireFaults [LTC6811_CELL_COUNT + 1];
+
+	// Internal
+	uint8_t tx [LTC6811_BUFFER_SIZE];
+	uint8_t rx [LTC6811_BUFFER_SIZE];
+};
+typedef struct ltc6811 ltc6811_t;
 
 // Functions ------------------------------------------------------------------------------------------------------------------
 
-bool ltc6811Init (ltc6811DaisyChain_t* chain, ltc6811DaisyChainConfig_t* config);
+/**
+ * @brief Initializes all devices in a daisy chain.
+ * @param daisyChain Array of @c ltc6811_t* indicating the order of devices in the chain. The first element indicates the
+ * bottom (first) device in the stack.
+ * @param deviceCount The number of elements in @c daisyChain .
+ * @param config The configuration of the chain.
+ * @return False if a fatal error occurred, true otherwise. A non-fatal return code does not mean that all devices are
+ * functional, simply that communication may be attempted.
+ */
+bool ltc6811Init (ltc6811_t* const* daisyChain, uint16_t deviceCount, const ltc6811Config_t* config);
 
-bool ltc6811SampleCells (ltc6811DaisyChain_t* chain);
+/**
+ * @brief Samples the cell voltages of all devices in a daisy-chain.
+ * @param bottom The bottom (first) device in the stack.
+ * @return False if a fatal error occurred, true otherwise. A non-fatal return code does not mean all measurements are valid,
+ * check individual device states to determine so.
+ */
+bool ltc6811SampleCells (ltc6811_t* bottom);
 
-bool ltc6811SampleGpio (ltc6811DaisyChain_t* chain);
+/**
+ * @brief Samples the GPIO voltages of all devices in a daisy-chain.
+ * @param bottom The bottom (first) device in the stack.
+ * @return False if a fatal error occurred, true otherwise. A non-fatal return code does not mean all measurements are valid,
+ * check individual sensor states to determine so.
+ */
+bool ltc6811SampleGpio (ltc6811_t* bottom);
 
-bool ltc6811OpenWireTest (ltc6811DaisyChain_t* chain);
+/**
+ * @brief Performs an open-wire test on all devices in a daisy-chain.
+ * @param bottom The bottom (first) device in the stack.
+ * @return False if a fatal error occurred, true otherwise. A non-fatal return code does not mean all measurements are valid,
+ * check individual device states to determine so.
+ */
+bool ltc6811OpenWireTest (ltc6811_t* bottom);
+
+/**
+ * @brief Sets all devices in a daisy-chain to the ready state.
+ * @param bottom The bottom (first) device in the stack.
+ */
+static inline void ltc6811ClearState (ltc6811_t* bottom)
+{
+	for (ltc6811_t* device = bottom; device != NULL; device = device->upperDevice)
+		device->state = LTC6811_STATE_READY;
+}
+
+static inline bool ltc6811UndervoltageFault (ltc6811_t* bottom)
+{
+	bool fault = false;
+	for (ltc6811_t* device = bottom; device != NULL; device = device->upperDevice)
+		for (uint8_t cell = 0; cell < LTC6811_CELL_COUNT; ++cell)
+			fault |= device->undervoltageFaults [cell];
+	return fault;
+}
+
+static inline bool ltc6811OvervoltageFault (ltc6811_t* bottom)
+{
+	bool fault = false;
+	for (ltc6811_t* device = bottom; device != NULL; device = device->upperDevice)
+		for (uint8_t cell = 0; cell < LTC6811_CELL_COUNT; ++cell)
+			fault |= device->overvoltageFaults [cell];
+	return fault;
+}
+
+static inline bool ltc6811OpenWireFault (ltc6811_t* bottom)
+{
+	bool fault = false;
+	for (ltc6811_t* device = bottom; device != NULL; device = device->upperDevice)
+		for (uint8_t cell = 0; cell < LTC6811_CELL_COUNT + 1; ++cell)
+			fault |= device->openWireFaults [cell];
+	return fault;
+}
+
+static inline bool ltc6811IsospiFault (ltc6811_t* bottom)
+{
+	bool fault = false;
+	for (ltc6811_t* device = bottom; device != NULL; device = device->upperDevice)
+		fault |= device->state == LTC6811_STATE_FAILED || device->state == LTC6811_STATE_PEC_ERROR;
+	return fault;
+}
+
+static inline bool ltc6811SelfTestFault (ltc6811_t* bottom)
+{
+	bool fault = false;
+	for (ltc6811_t* device = bottom; device != NULL; device = device->upperDevice)
+		fault |= device->state == LTC6811_STATE_SELF_TEST_FAULT;
+	return fault;
+}
 
 #endif // LTC6811_H

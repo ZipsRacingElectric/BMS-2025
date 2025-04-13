@@ -60,9 +60,12 @@ int main (void)
 		// // Reset the watchdog
 		// watchdogReset ();
 
-		ltc6811SampleCells (&ltcChain);
-		ltc6811SampleGpio (&ltcChain);
-		ltc6811OpenWireTest (&ltcChain);
+		chMtxLock (&ltcMutex);
+		ltc6811ClearState (ltcBottom);
+		ltc6811SampleCells (ltcBottom);
+		ltc6811SampleGpio (ltcBottom);
+		ltc6811OpenWireTest (ltcBottom);
+		chMtxUnlock (&ltcMutex);
 
 		chThdSleepMilliseconds (100);
 	}

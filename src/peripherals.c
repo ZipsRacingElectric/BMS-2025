@@ -6,8 +6,9 @@
 mc24lc32_t		eeprom;
 eepromMap_t*	eepromMap;
 
-ltc6811_t ltcs [LTC_COUNT];
-ltc6811DaisyChain_t ltcChain;
+ltc6811_t		ltcs [LTC_COUNT];
+ltc6811_t*		ltcBottom;
+mutex_t			ltcMutex;
 
 thermistorPulldown_t thermistors [LTC_COUNT][LTC6811_GPIO_COUNT];
 
@@ -32,7 +33,7 @@ static const mc24lc32Config_t EEPROM_CONFIG =
 
 // TODO(Barach): Baudrate should be higher
 /// @brief Configuration for the LTC daisy chain.
-ltc6811DaisyChainConfig_t ltcChainConfig =
+static const ltc6811Config_t DAISY_CHAIN_CONFIG =
 {
 	.spiDriver				= &SPID1,
 	.spiConfig 				=
@@ -49,20 +50,21 @@ ltc6811DaisyChainConfig_t ltcChainConfig =
 		.sspad				= PAL_PAD (LINE_CS_ISOSPI)		//
 	},
 	.spiMiso				= LINE_SPI1_MISO,
-	.devices				= ltcs,
-	.deviceCount			= LTC_COUNT,
 	.readAttemptCount		= 5,
 	.cellAdcMode			= LTC6811_ADC_422HZ, // TODO(Barach): Should be 26Hz
 	.gpioAdcMode			= LTC6811_ADC_26HZ,
 	.openWireTestIterations	= 4,
-	.cellVoltageMax			= 4.0,
+	.cellVoltageMax			= 4.1,
 	.cellVoltageMin			= 2.7,
-	.gpioAdcsRatiometric	=
+	.gpioSensors =
 	{
-		true, true, true, true, true
-	},
-	.gpioAdcSensors			=
-	{
+		{
+			(analogSensor_t*) &thermistors [1][0],
+			(analogSensor_t*) &thermistors [1][1],
+			(analogSensor_t*) &thermistors [1][2],
+			(analogSensor_t*) &thermistors [1][3],
+			(analogSensor_t*) &thermistors [1][4],
+		},
 		{
 			(analogSensor_t*) &thermistors [0][0],
 			(analogSensor_t*) &thermistors [0][1],
@@ -71,13 +73,28 @@ ltc6811DaisyChainConfig_t ltcChainConfig =
 			(analogSensor_t*) &thermistors [0][4],
 		},
 		{
-			(analogSensor_t*) &thermistors [1][0],
-			(analogSensor_t*) &thermistors [1][1],
-			(analogSensor_t*) &thermistors [1][2],
-			(analogSensor_t*) &thermistors [1][3],
-			(analogSensor_t*) &thermistors [1][4],
+			NULL, NULL, NULL, NULL, NULL
+		},
+		{
+			NULL, NULL, NULL, NULL, NULL
 		}
 	},
+};
+
+static ltc6811_t* const DAISY_CHAIN [] =
+{
+	&ltcs [1],
+	&ltcs [0],
+	&ltcs [3],
+	&ltcs [2],
+	&ltcs [5],
+	&ltcs [4],
+	&ltcs [7],
+	&ltcs [6],
+	&ltcs [9],
+	&ltcs [8],
+	&ltcs [11],
+	&ltcs [10]
 };
 
 static const thermistorPulldownConfig_t THERMISTOR_CONFIG =
@@ -88,7 +105,6 @@ static const thermistorPulldownConfig_t THERMISTOR_CONFIG =
 	.steinhartHartD			= 0,
 	.resistanceReference	= 10,
 	.resistancePullup		= 10000,
-	.sampleVdd				= 30000,
 	.temperatureMin			= -10,
 	.temperatureMax			= 100
 };
@@ -111,14 +127,16 @@ bool peripheralsInit (void)
 	peripheralsReconfigure ();
 
 	// LTC daisy chain initialization
-	ltc6811Init (&ltcChain, &ltcChainConfig);
+	ltc6811Init (DAISY_CHAIN, LTC_COUNT, &DAISY_CHAIN_CONFIG);
+	ltcBottom = DAISY_CHAIN [0];
+	chMtxObjectInit (&ltcMutex);
+
 	return true;
 }
 
 void peripheralsReconfigure (void)
 {
 	// Thermistor initialization
-	// TODO(Barach): const discard
 	for (uint16_t deviceIndex = 0; deviceIndex < LTC_COUNT; ++deviceIndex)
 		for (uint16_t gpioIndex = 0; gpioIndex < LTC6811_GPIO_COUNT; ++gpioIndex)
 			thermistorPulldownInit (&thermistors [deviceIndex][gpioIndex], &THERMISTOR_CONFIG);

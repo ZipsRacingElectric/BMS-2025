@@ -8,13 +8,18 @@
 // Includes -------------------------------------------------------------------------------------------------------------------
 
 // Includes
-#include "can_vehicle.h"
 #include "debug.h"
 #include "peripherals.h"
 #include "watchdog.h"
+#include "can_vehicle.h"
+#include "can/transmit.h"
 
 // ChibiOS
 #include "hal.h"
+
+// Constants ------------------------------------------------------------------------------------------------------------------
+
+#define BMS_THREAD_PERIOD TIME_MS2I (500)
 
 // Interrupts -----------------------------------------------------------------------------------------------------------------
 
@@ -55,18 +60,34 @@ int main (void)
 	// // Start the watchdog timer
 	// watchdogStart ();
 
+	systime_t timePrevious = chVTGetSystemTimeX ();
 	while (true)
 	{
 		// // Reset the watchdog
 		// watchdogReset ();
 
-		chMtxLock (&ltcMutex);
+		// Sample the LTCs
 		ltc6811ClearState (ltcBottom);
 		ltc6811SampleCells (ltcBottom);
 		ltc6811SampleGpio (ltcBottom);
 		ltc6811OpenWireTest (ltcBottom);
-		chMtxUnlock (&ltcMutex);
 
-		chThdSleepMilliseconds (100);
+		// Status message
+		transmitStatusMessage (&CAND1, BMS_THREAD_PERIOD);
+
+		// Cell voltage messages
+		for (uint16_t index = 0; index < VOLTAGE_MESSAGE_COUNT; ++index)
+			transmitVoltageMessage (&CAND1, BMS_THREAD_PERIOD, index);
+
+		// Sense line temperature messages
+		for (uint16_t index = 0; index < TEMPERATURE_MESSAGE_COUNT; ++index)
+			transmitTemperatureMessage (&CAND1, BMS_THREAD_PERIOD, index);
+
+		// Sense line status messages
+		for (uint16_t index = 0; index < SENSE_LINE_STATUS_MESSAGE_COUNT; ++index)
+			transmitSenseLineStatusMessage (&CAND1, BMS_THREAD_PERIOD, index);
+
+		chThdSleepUntilWindowed (timePrevious, chTimeAddX (timePrevious, BMS_THREAD_PERIOD));
+		timePrevious = chVTGetSystemTimeX ();
 	}
 }

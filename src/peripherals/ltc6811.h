@@ -24,6 +24,7 @@
 // Constants ------------------------------------------------------------------------------------------------------------------
 
 #define LTC6811_CELL_COUNT		12
+#define LTC6811_WIRE_COUNT		(LTC6811_CELL_COUNT + 1)
 #define LTC6811_GPIO_COUNT		5
 #define LTC6811_BUFFER_SIZE		8
 
@@ -101,8 +102,12 @@ typedef struct
 	ltc6811DischargeTimeout_t dischargeTimeout;
 
 	/// @brief The number of pull-up / pull-down command iterations to perform during the open wire test. This value should be
-	/// determined through testing, but cannot be less than 2.
+	/// determined through testing, but cannot be less than 2. Recommended value of 4.
 	uint8_t openWireTestIterations;
+
+	/// @brief The maximum number of consecutive faulted measurements before an actual fault is registered. This value should
+	/// be determined through testing. Note this does not apply to IsoSPI faults.
+	uint16_t faultCount;
 
 	/// @brief The minimum plausible cell voltage measurement, any lower indicates an undervoltage condition.
 	float cellVoltageMin;
@@ -140,8 +145,11 @@ struct ltc6811
 
 	// Fault conditions
 	bool overvoltageFaults [LTC6811_CELL_COUNT];
+	uint16_t overvoltageCounters [LTC6811_CELL_COUNT];
 	bool undervoltageFaults [LTC6811_CELL_COUNT];
-	bool openWireFaults [LTC6811_CELL_COUNT + 1];
+	uint16_t undervoltageCounters [LTC6811_CELL_COUNT];
+	bool openWireFaults [LTC6811_WIRE_COUNT];
+	uint16_t openWireCounters [LTC6811_WIRE_COUNT];
 
 	// Internal
 	uint8_t tx [LTC6811_BUFFER_SIZE];
@@ -218,8 +226,8 @@ static inline bool ltc6811OpenWireFault (ltc6811_t* bottom)
 {
 	bool fault = false;
 	for (ltc6811_t* device = bottom; device != NULL; device = device->upperDevice)
-		for (uint8_t cell = 0; cell < LTC6811_CELL_COUNT + 1; ++cell)
-			fault |= device->openWireFaults [cell];
+		for (uint8_t wire = 0; wire < LTC6811_WIRE_COUNT; ++wire)
+			fault |= device->openWireFaults [wire];
 	return fault;
 }
 

@@ -8,7 +8,6 @@ eepromMap_t*	eepromMap;
 
 ltc6811_t		ltcs [LTC_COUNT];
 ltc6811_t*		ltcBottom;
-mutex_t			ltcMutex;
 
 thermistorPulldown_t thermistors [LTC_COUNT][LTC6811_GPIO_COUNT];
 
@@ -31,7 +30,6 @@ static const mc24lc32Config_t EEPROM_CONFIG =
 	.magicString	= EEPROM_MAP_STRING
 };
 
-// TODO(Barach): Baudrate should be higher
 /// @brief Configuration for the LTC daisy chain.
 static const ltc6811Config_t DAISY_CHAIN_CONFIG =
 {
@@ -42,7 +40,7 @@ static const ltc6811Config_t DAISY_CHAIN_CONFIG =
 		.slave				= false,						// Device is in master mode.
 		.cr1				= 0								// 2-line unidirectional, no CRC, MSB first, master mode, clock
 															// idles high, data capture on first clock transition.
-							| 0b111 << SPI_CR1_BR_Pos,		// Baudrate 328125 bps.
+							| 0b110 << SPI_CR1_BR_Pos,		// Baudrate 656250 bps.
 		.cr2				= 0,							// Default CR2 config.
 		.data_cb			= NULL,							// No callbacks.
 		.error_cb			= NULL,							//
@@ -53,7 +51,8 @@ static const ltc6811Config_t DAISY_CHAIN_CONFIG =
 	.readAttemptCount		= 5,
 	.cellAdcMode			= LTC6811_ADC_422HZ, // TODO(Barach): Should be 26Hz
 	.gpioAdcMode			= LTC6811_ADC_26HZ,
-	.openWireTestIterations	= 4,
+	.openWireTestIterations	= 3,
+	.faultCount				= 6,
 	.cellVoltageMax			= 4.1,
 	.cellVoltageMin			= 2.7,
 	.gpioSensors =
@@ -129,7 +128,6 @@ bool peripheralsInit (void)
 	// LTC daisy chain initialization
 	ltc6811Init (DAISY_CHAIN, LTC_COUNT, &DAISY_CHAIN_CONFIG);
 	ltcBottom = DAISY_CHAIN [0];
-	chMtxObjectInit (&ltcMutex);
 
 	return true;
 }

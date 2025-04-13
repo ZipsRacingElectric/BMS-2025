@@ -8,20 +8,12 @@
 
 static CAN_THREAD_WORKING_AREA (can1RxThreadWa);
 
-static THD_WORKING_AREA (can1TxThreadWa, 512);
-
 // Global Nodes ---------------------------------------------------------------------------------------------------------------
 
 #define NODE_COUNT sizeof (nodes) / sizeof (nodes [0])
 static canNode_t* nodes [0];
 
-// Function Prototypes --------------------------------------------------------------------------------------------------------
-
-static void can1TxThread (void* arg);
-
 // Configuration --------------------------------------------------------------------------------------------------------------
-
-#define TX_THREAD_PERIOD TIME_MS2I(200)
 
 /**
  * @brief Configuration of the CAN 1 peripheral.
@@ -65,39 +57,5 @@ bool canInterfaceInit (tprio_t priority)
 	// Create the CAN RX thread
 	canThreadStart (can1RxThreadWa, sizeof (can1RxThreadWa), priority, &CAN1_RX_THREAD_CONFIG);
 
-	// Create the CAN TX thread
-	chThdCreateStatic (can1TxThreadWa, sizeof (can1TxThreadWa), priority, can1TxThread, NULL);
-
 	return true;
-}
-
-void can1TxThread (void* arg)
-{
-	(void) arg;
-
-	chRegSetThreadName ("can_1_tx");
-
-	while (true)
-	{
-		chMtxLock (&ltcMutex);
-
-		// Status message
-		transmitStatusMessage (&CAND1, TX_THREAD_PERIOD);
-
-		// Cell voltage messages
-		for (uint16_t index = 0; index < VOLTAGE_MESSAGE_COUNT; ++index)
-			transmitVoltageMessage (&CAND1, TX_THREAD_PERIOD, index);
-
-		// Sense line temperature messages
-		for (uint16_t index = 0; index < TEMPERATURE_MESSAGE_COUNT; ++index)
-			transmitTemperatureMessage (&CAND1, TX_THREAD_PERIOD, index);
-
-		// Sense line status messages
-		for (uint16_t index = 0; index < SENSE_LINE_STATUS_MESSAGE_COUNT; ++index)
-			transmitSenseLineStatusMessage (&CAND1, TX_THREAD_PERIOD, index);
-
-		chMtxUnlock (&ltcMutex);
-
-		chThdSleep (TX_THREAD_PERIOD);
-	}
 }

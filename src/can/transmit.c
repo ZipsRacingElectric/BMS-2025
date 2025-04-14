@@ -22,22 +22,6 @@
 
 msg_t transmitStatusMessage (CANDriver* driver, sysinterval_t timeout)
 {
-	bool undervoltage = ltc6811UndervoltageFault (ltcBottom);
-	bool overvoltage = ltc6811OvervoltageFault (ltcBottom);
-	bool senseLine = ltc6811OpenWireFault (ltcBottom);
-	bool isoSpi = ltc6811IsospiFault (ltcBottom);
-	bool selfTest = ltc6811SelfTestFault (ltcBottom);
-
-	bool undertemperature = false;
-	for (uint16_t ltcIndex = 0; ltcIndex < LTC_COUNT; ++ltcIndex)
-		for (uint16_t thermistorIndex = 0; thermistorIndex < LTC6811_GPIO_COUNT; ++thermistorIndex)
-			undertemperature |= thermistors [ltcIndex][thermistorIndex].undertemperatureFault;
-
-	bool overtemperature = false;
-	for (uint16_t ltcIndex = 0; ltcIndex < LTC_COUNT; ++ltcIndex)
-		for (uint16_t thermistorIndex = 0; thermistorIndex < LTC6811_GPIO_COUNT; ++thermistorIndex)
-			overtemperature |= thermistors [ltcIndex][thermistorIndex].overtemperatureFault;
-
 	CANTxFrame frame =
 	{
 		.DLC	= 6,
@@ -45,13 +29,13 @@ msg_t transmitStatusMessage (CANDriver* driver, sysinterval_t timeout)
 		.SID	= STATUS_MESSAGE_ID,
 		.data8	=
 		{
-			undervoltage |
-			(overvoltage << 1) |
-			(undertemperature << 2) |
-			(overtemperature << 3) |
-			(senseLine << 4) |
-			(isoSpi << 5) |
-			(selfTest << 6)
+			undervoltageFault |
+			(overvoltageFault << 1) |
+			(undertemperatureFault << 2) |
+			(overtemperatureFault << 3) |
+			(senseLineFault << 4) |
+			(isoSpiFault << 5) |
+			(selfTestFault << 6)
 		}
 	};
 

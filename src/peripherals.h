@@ -22,6 +22,19 @@
 #define CELL_COUNT (LTC_COUNT * LTC6811_CELL_COUNT)
 #define TEMP_COUNT (LTC_COUNT * LTC6811_GPIO_COUNT)
 
+// Global State ---------------------------------------------------------------------------------------------------------------
+
+extern float packVoltage;
+
+extern bool bmsFault;
+extern bool undervoltageFault;
+extern bool overvoltageFault;
+extern bool undertemperatureFault;
+extern bool overtemperatureFault;
+extern bool senseLineFault;
+extern bool isoSpiFault;
+extern bool selfTestFault;
+
 // Global Peripherals ---------------------------------------------------------------------------------------------------------
 
 /// @brief The BMS's EEPROM. This is responsible for storing all non-volatile variables.
@@ -47,5 +60,10 @@ bool peripheralsInit (void);
  * @brief Re-initializes the BMS's peripherals after a change has been made to the on-board EEPROM.
  */
 void peripheralsReconfigure (void);
+
+/**
+ * @brief Samples the cell voltages, temperatures, and statuses of all the LTCs within the BMS.
+ */
+void peripheralsSample (void);
 
 #endif // PERIPHERALS_H

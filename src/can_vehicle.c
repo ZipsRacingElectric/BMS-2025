@@ -42,7 +42,7 @@ static const canThreadConfig_t CAN1_RX_THREAD_CONFIG =
 
 // Functions ------------------------------------------------------------------------------------------------------------------
 
-bool canInterfaceInit (tprio_t priority)
+bool canVehicleInit (tprio_t priority)
 {
 	// CAN 1 driver initialization
 	if (canStart (&CAND1, &CAN1_CONFIG) != MSG_OK)
@@ -58,4 +58,36 @@ bool canInterfaceInit (tprio_t priority)
 	canThreadStart (can1RxThreadWa, sizeof (can1RxThreadWa), priority, &CAN1_RX_THREAD_CONFIG);
 
 	return true;
+}
+
+void canVehicleTransmit (sysinterval_t timeout)
+{
+	// Status message
+	systime_t timeCurrent = chVTGetSystemTimeX ();
+	systime_t timeDeadline = chTimeAddX (timeCurrent, timeout);
+	transmitStatusMessage (&CAND1, timeout);
+
+	// Cell voltage messages
+	for (uint16_t index = 0; index < VOLTAGE_MESSAGE_COUNT; ++index)
+	{
+		timeCurrent = chVTGetSystemTimeX ();
+		timeout = chTimeDiffX (timeCurrent, timeDeadline);
+		transmitVoltageMessage (&CAND1, timeout, index);
+	}
+
+	// Sense line temperature messages
+	for (uint16_t index = 0; index < TEMPERATURE_MESSAGE_COUNT; ++index)
+	{
+		timeCurrent = chVTGetSystemTimeX ();
+		timeout = chTimeDiffX (timeCurrent, timeDeadline);
+		transmitTemperatureMessage (&CAND1, timeout, index);
+	}
+
+	// Sense line status messages
+	for (uint16_t index = 0; index < SENSE_LINE_STATUS_MESSAGE_COUNT; ++index)
+	{
+		timeCurrent = chVTGetSystemTimeX ();
+		timeout = chTimeDiffX (timeCurrent, timeDeadline);
+		transmitSenseLineStatusMessage (&CAND1, timeout, index);
+	}
 }

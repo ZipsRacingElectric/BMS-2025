@@ -19,4 +19,6 @@
 
 // Functions ------------------------------------------------------------------------------------------------------------------
 
-bool canInterfaceInit (tprio_t priority);
+bool canVehicleInit (tprio_t priority);
+
+void canVehicleTransmit (sysinterval_t timeout);

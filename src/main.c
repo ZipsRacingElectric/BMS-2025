@@ -12,7 +12,6 @@
 #include "peripherals.h"
 #include "watchdog.h"
 #include "can_vehicle.h"
-#include "can/transmit.h"
 
 // ChibiOS
 #include "hal.h"
@@ -28,7 +27,8 @@ void hardFaultCallback (void)
 	// TODO(Barach):
 	// Fault handler implementation
 
-	palWriteLine (LINE_SHUTDOWN_STATUS, false);
+	// Open the shutdown loop
+	palWriteLine (LINE_BMS_FLT, true);
 }
 
 // Entrypoint -----------------------------------------------------------------------------------------------------------------
@@ -50,44 +50,74 @@ int main (void)
 		while (true);
 	}
 
-	// TODO(Barach): Check charger pin
-	if (!canInterfaceInit (NORMALPRIO))
-	{
-		hardFaultCallback ();
-		while (true);
-	}
-
-	// // Start the watchdog timer
+	// // Start the watchdog timer.
 	// watchdogStart ();
 
-	systime_t timePrevious = chVTGetSystemTimeX ();
-	while (true)
+	// If detect line is low, accumulator is on charger. Otherwise, accumulator is in vehicle.
+	if (palReadLine (LINE_CHARGER_DETECT))
 	{
-		// // Reset the watchdog
-		// watchdogReset ();
+		// Vehicle mode
 
-		// Sample the LTCs
-		ltc6811ClearState (ltcBottom);
-		ltc6811SampleCells (ltcBottom);
-		ltc6811SampleGpio (ltcBottom);
-		ltc6811OpenWireTest (ltcBottom);
+		// Initialize the CAN interface.
+		if (!canVehicleInit (NORMALPRIO))
+		{
+			hardFaultCallback ();
+			while (true);
+		}
 
-		// Status message
-		transmitStatusMessage (&CAND1, BMS_THREAD_PERIOD);
+		// Main loop
+		systime_t timePrevious = chVTGetSystemTimeX ();
+		while (true)
+		{
+			// // Reset the watchdog.
+			// watchdogReset ();
 
-		// Cell voltage messages
-		for (uint16_t index = 0; index < VOLTAGE_MESSAGE_COUNT; ++index)
-			transmitVoltageMessage (&CAND1, BMS_THREAD_PERIOD, index);
+			// Sample the LTCs.
+			peripheralsSample ();
 
-		// Sense line temperature messages
-		for (uint16_t index = 0; index < TEMPERATURE_MESSAGE_COUNT; ++index)
-			transmitTemperatureMessage (&CAND1, BMS_THREAD_PERIOD, index);
+			// If a fault is present, open the shutdown loop.
+			palWriteLine (LINE_BMS_FLT, bmsFault);
 
-		// Sense line status messages
-		for (uint16_t index = 0; index < SENSE_LINE_STATUS_MESSAGE_COUNT; ++index)
-			transmitSenseLineStatusMessage (&CAND1, BMS_THREAD_PERIOD, index);
+			// Transmit the CAN messages.
+			canVehicleTransmit (BMS_THREAD_PERIOD);
 
-		chThdSleepUntilWindowed (timePrevious, chTimeAddX (timePrevious, BMS_THREAD_PERIOD));
-		timePrevious = chVTGetSystemTimeX ();
+			// Sleep until the next loop
+			chThdSleepUntilWindowed (timePrevious, chTimeAddX (timePrevious, BMS_THREAD_PERIOD));
+			timePrevious = chVTGetSystemTimeX ();
+		}
+	}
+	else
+	{
+		// Charger mode
+
+		// TODO(Barach): Charger CAN interface.
+		// Initialize the CAN interface.
+		if (!canVehicleInit (NORMALPRIO))
+		{
+			hardFaultCallback ();
+			while (true);
+		}
+
+		// Main loop
+		systime_t timePrevious = chVTGetSystemTimeX ();
+		while (true)
+		{
+			// // Reset the watchdog.
+			// watchdogReset ();
+
+			// Sample the LTCs.
+			peripheralsSample ();
+
+			// If a fault is present, open the shutdown loop.
+			palWriteLine (LINE_BMS_FLT, bmsFault);
+
+			// TODO(Barach): Charger CAN interface.
+			// Transmit the CAN messages.
+			canVehicleTransmit (BMS_THREAD_PERIOD);
+
+			// Sleep until the next loop
+			chThdSleepUntilWindowed (timePrevious, chTimeAddX (timePrevious, BMS_THREAD_PERIOD));
+			timePrevious = chVTGetSystemTimeX ();
+		}
 	}
 }

@@ -1,6 +1,19 @@
 // Header
 #include "peripherals.h"
 
+// Global State ---------------------------------------------------------------------------------------------------------------
+
+float packVoltage = 0.0f;
+
+bool bmsFault = true;
+bool undervoltageFault = true;
+bool overvoltageFault = true;
+bool undertemperatureFault = true;
+bool overtemperatureFault = true;
+bool senseLineFault = true;
+bool isoSpiFault = true;
+bool selfTestFault = true;
+
 // Global Peripherals ---------------------------------------------------------------------------------------------------------
 
 mc24lc32_t		eeprom;
@@ -138,4 +151,37 @@ void peripheralsReconfigure (void)
 	for (uint16_t deviceIndex = 0; deviceIndex < LTC_COUNT; ++deviceIndex)
 		for (uint16_t gpioIndex = 0; gpioIndex < LTC6811_GPIO_COUNT; ++gpioIndex)
 			thermistorPulldownInit (&thermistors [deviceIndex][gpioIndex], &THERMISTOR_CONFIG);
+}
+
+void peripheralsSample (void)
+{
+	// Sample the LTCs
+	ltc6811ClearState (ltcBottom);
+	ltc6811SampleCells (ltcBottom);
+	ltc6811SampleCellVoltageSum (ltcBottom);
+	ltc6811SampleCellVoltageFaults (ltcBottom);
+	ltc6811SampleGpio (ltcBottom);
+	ltc6811OpenWireTest (ltcBottom);
+
+	// Update the global state
+
+	packVoltage = 0.0f;
+	for (uint16_t index = 0; index < LTC_COUNT; ++index)
+		packVoltage += ltcs [index].cellVoltageSum;
+
+	undervoltageFault = ltc6811UndervoltageFault (ltcBottom);
+	overvoltageFault = ltc6811OvervoltageFault (ltcBottom);
+	senseLineFault = ltc6811OpenWireFault (ltcBottom);
+	isoSpiFault = ltc6811IsospiFault (ltcBottom);
+	selfTestFault = ltc6811SelfTestFault (ltcBottom);
+
+	undertemperatureFault = false;
+	for (uint16_t ltcIndex = 0; ltcIndex < LTC_COUNT; ++ltcIndex)
+		for (uint16_t thermistorIndex = 0; thermistorIndex < LTC6811_GPIO_COUNT; ++thermistorIndex)
+			undertemperatureFault |= thermistors [ltcIndex][thermistorIndex].undertemperatureFault;
+
+	overtemperatureFault = false;
+	for (uint16_t ltcIndex = 0; ltcIndex < LTC_COUNT; ++ltcIndex)
+		for (uint16_t thermistorIndex = 0; thermistorIndex < LTC6811_GPIO_COUNT; ++thermistorIndex)
+			overtemperatureFault |= thermistors [ltcIndex][thermistorIndex].overtemperatureFault;
 }

@@ -52,6 +52,8 @@
 #define CFGR5(dcto, dcc12, dcc11, dcc10, dcc9)																				\
 	((uint8_t) (((dcto) << 4) | ((dcc12) << 3) | ((dcc11) << 2) | ((dcc10) << 1) | (dcc9)))
 
+#define STAR0_1_SC(star0, star1)		(((uint16_t) (((star1) << 8) | (star0))) * 0.002f)
+
 #define STBR2_C1UV(stbr2)				((stbr2 & 0b00000001) == 0b00000001)
 #define STBR2_C1OV(stbr2)				((stbr2 & 0b00000010) == 0b00000010)
 #define STBR2_C2UV(stbr2)				((stbr2 & 0b00000100) == 0b00000100)
@@ -322,6 +324,35 @@ bool ltc6811SampleCells (ltc6811_t* bottom)
 		stop (bottom);
 		return false;
 	}
+
+	stop (bottom);
+	return true;
+}
+
+bool ltc6811SampleCellVoltageSum (ltc6811_t* bottom)
+{
+	start (bottom);
+	wakeupSleep (bottom);
+
+	// Read the status register group A.
+	if (!readRegisterGroups (bottom, COMMAND_RDSTATA))
+	{
+		stop (bottom);
+		return false;
+	}
+
+	// Read the sum of cell voltages.
+	for (ltc6811_t* device = bottom; device != NULL; device = device->upperDevice)
+		device->cellVoltageSum = STAR0_1_SC (device->rx [0], device->rx [1]);
+
+	stop (bottom);
+	return true;
+}
+
+bool ltc6811SampleCellVoltageFaults (ltc6811_t* bottom)
+{
+	start (bottom);
+	wakeupSleep (bottom);
 
 	// Read the status register group B.
 	if (!readRegisterGroups (bottom, COMMAND_RDSTATB))

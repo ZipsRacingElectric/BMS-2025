@@ -137,6 +137,7 @@ struct ltc6811
 	ltc6811State_t state;
 
 	// ADC measurements
+	float cellVoltageSum;
 	float cellVoltages [LTC6811_CELL_COUNT];
 	float cellVoltagesPullup [LTC6811_CELL_COUNT];
 	float cellVoltagesPulldown [LTC6811_CELL_COUNT];
@@ -177,6 +178,24 @@ bool ltc6811Init (ltc6811_t* const* daisyChain, uint16_t deviceCount, const ltc6
  * check individual device states to determine so.
  */
 bool ltc6811SampleCells (ltc6811_t* bottom);
+
+/**
+ * @brief Computers the sum of cell voltages for all devices in a daisy-chain.
+ * @note This can only be done after a call to @c ltc6811SampleCells
+ * @param bottom The bottom (first) device in the stack.
+ * @return False if a fatal error occurred, true otherwise. A non-fatal return code does not mean all measurements are valid,
+ * check individual device states to determine so.
+ */
+bool ltc6811SampleCellVoltageSum (ltc6811_t* bottom);
+
+/**
+ * @brief Checks the undervoltage / overvoltage conditions of all devices in a daisy-chain.
+ * @note This can only be done after a call to @c ltc6811SampleCells
+ * @param bottom The bottom (first) device in the stack.
+ * @return False if a fatal error occurred, true otherwise. A non-fatal return code does not mean all measurements are valid,
+ * check individual device states to determine so.
+ */
+bool ltc6811SampleCellVoltageFaults (ltc6811_t* bottom);
 
 /**
  * @brief Samples the GPIO voltages of all devices in a daisy-chain.

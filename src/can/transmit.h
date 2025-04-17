@@ -21,6 +21,8 @@
 
 // Functions ------------------------------------------------------------------------------------------------------------------
 
+void transmitBmsMessages (sysinterval_t timeout);
+
 // TODO(Barach): Docs
 msg_t transmitStatusMessage (CANDriver* driver, sysinterval_t timeout);
 

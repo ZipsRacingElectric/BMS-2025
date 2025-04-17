@@ -1,3 +1,6 @@
+#ifndef CAN_VEHICLE_H
+#define CAN_VEHICLE_H
+
 // Vehicle CAN Interface ------------------------------------------------------------------------------------------------------
 //
 // Author: Cole Barach
@@ -7,18 +10,11 @@
 
 // Includes -------------------------------------------------------------------------------------------------------------------
 
-// Includes
-#include "can/can_thread.h"
-
 // ChibiOS
-#include "hal.h"
-
-// Global Nodes ---------------------------------------------------------------------------------------------------------------
-
-// TODO(Barach): Nodes.
+#include "ch.h"
 
 // Functions ------------------------------------------------------------------------------------------------------------------
 
 bool canVehicleInit (tprio_t priority);
 
-void canVehicleTransmit (sysinterval_t timeout);
+#endif // CAN_VEHICLE_H

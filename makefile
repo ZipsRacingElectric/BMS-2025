@@ -20,8 +20,10 @@ CSRC =	$(ALLCSRC)					\
 		src/peripherals.c			\
 		src/peripherals/ltc6811.c	\
 									\
+		src/can_charger.c			\
 		src/can_vehicle.c			\
 		src/can/receive.c			\
+		src/can/tc_hk_lf_540_14.c	\
 		src/can/transmit.c			\
 									\
 		src/watchdog.c
@@ -36,7 +38,7 @@ include common/src/peripherals/mc24lc32.mk
 include common/src/peripherals/thermistor_pulldown.mk
 
 # Compiler flags
-USE_OPT = -O0 -Wall -Wextra -lm
+USE_OPT = -Og -Wall -Wextra -lm
 
 # C macro definitions
 UDEFS =

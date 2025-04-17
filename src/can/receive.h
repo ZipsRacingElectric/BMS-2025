@@ -13,6 +13,6 @@
 // ChibiOS
 #include "hal.h"
 
-int8_t can1RxHandler (void* arg, CANRxFrame* frame);
+int8_t receiveBmsMessage (void* arg, CANRxFrame* frame);
 
 #endif // RECEIVE_H

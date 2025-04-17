@@ -12,6 +12,8 @@
 #include "peripherals.h"
 #include "watchdog.h"
 #include "can_vehicle.h"
+#include "can_charger.h"
+#include "can/transmit.h"
 
 // ChibiOS
 #include "hal.h"
@@ -28,7 +30,7 @@ void hardFaultCallback (void)
 	// Fault handler implementation
 
 	// Open the shutdown loop
-	palWriteLine (LINE_BMS_FLT, true);
+	palWriteLine (LINE_BMS_FLT, false);
 }
 
 // Entrypoint -----------------------------------------------------------------------------------------------------------------
@@ -76,10 +78,11 @@ int main (void)
 			peripheralsSample ();
 
 			// If a fault is present, open the shutdown loop.
-			palWriteLine (LINE_BMS_FLT, bmsFault);
+			bool fltLine = !bmsFault;
+			palWriteLine (LINE_BMS_FLT, fltLine);
 
 			// Transmit the CAN messages.
-			canVehicleTransmit (BMS_THREAD_PERIOD);
+			transmitBmsMessages (BMS_THREAD_PERIOD);
 
 			// Sleep until the next loop
 			chThdSleepUntilWindowed (timePrevious, chTimeAddX (timePrevious, BMS_THREAD_PERIOD));
@@ -90,9 +93,8 @@ int main (void)
 	{
 		// Charger mode
 
-		// TODO(Barach): Charger CAN interface.
 		// Initialize the CAN interface.
-		if (!canVehicleInit (NORMALPRIO))
+		if (!canChargerInit (NORMALPRIO))
 		{
 			hardFaultCallback ();
 			while (true);
@@ -109,11 +111,11 @@ int main (void)
 			peripheralsSample ();
 
 			// If a fault is present, open the shutdown loop.
-			palWriteLine (LINE_BMS_FLT, bmsFault);
+			bool fltLine = !bmsFault;
+			palWriteLine (LINE_BMS_FLT, fltLine);
 
-			// TODO(Barach): Charger CAN interface.
 			// Transmit the CAN messages.
-			canVehicleTransmit (BMS_THREAD_PERIOD);
+			transmitBmsMessages (BMS_THREAD_PERIOD);
 
 			// Sleep until the next loop
 			chThdSleepUntilWindowed (timePrevious, chTimeAddX (timePrevious, BMS_THREAD_PERIOD));

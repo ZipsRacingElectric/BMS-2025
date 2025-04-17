@@ -175,13 +175,17 @@ void peripheralsSample (void)
 	isoSpiFault = ltc6811IsospiFault (ltcBottom);
 	selfTestFault = ltc6811SelfTestFault (ltcBottom);
 
+	// TODO(Barach): Re-implement
 	undertemperatureFault = false;
-	for (uint16_t ltcIndex = 0; ltcIndex < LTC_COUNT; ++ltcIndex)
-		for (uint16_t thermistorIndex = 0; thermistorIndex < LTC6811_GPIO_COUNT; ++thermistorIndex)
-			undertemperatureFault |= thermistors [ltcIndex][thermistorIndex].undertemperatureFault;
+	// for (uint16_t ltcIndex = 0; ltcIndex < LTC_COUNT; ++ltcIndex)
+	// 	for (uint16_t thermistorIndex = 0; thermistorIndex < LTC6811_GPIO_COUNT; ++thermistorIndex)
+	// 		undertemperatureFault |= thermistors [ltcIndex][thermistorIndex].undertemperatureFault;
 
 	overtemperatureFault = false;
 	for (uint16_t ltcIndex = 0; ltcIndex < LTC_COUNT; ++ltcIndex)
 		for (uint16_t thermistorIndex = 0; thermistorIndex < LTC6811_GPIO_COUNT; ++thermistorIndex)
 			overtemperatureFault |= thermistors [ltcIndex][thermistorIndex].overtemperatureFault;
+
+	bmsFault = undervoltageFault || overtemperatureFault || senseLineFault || isoSpiFault || senseLineFault ||
+		undertemperatureFault || overtemperatureFault;
 }

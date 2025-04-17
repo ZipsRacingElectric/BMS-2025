@@ -5,11 +5,10 @@
 #include "can/can_thread.h"
 #include "watchdog.h"
 
-int8_t can1RxHandler (void* arg, CANRxFrame* frame)
+int8_t receiveBmsMessage (void* arg, CANRxFrame* frame)
 {
 	// First argument is config
 	const canThreadConfig_t* config = (canThreadConfig_t*) arg;
-
 	(void) config;
 
 	// TODO(Barach): Move to write-only command

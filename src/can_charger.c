@@ -1,5 +1,5 @@
 // Header
-#include "can_vehicle.h"
+#include "can_charger.h"
 
 // Includes
 #include "can/can_thread.h"
@@ -8,6 +8,16 @@
 // Threads --------------------------------------------------------------------------------------------------------------------
 
 static CAN_THREAD_WORKING_AREA (can1RxThreadWa);
+
+// Global Nodes ---------------------------------------------------------------------------------------------------------------
+
+tcCharger_t charger;
+
+#define NODE_COUNT sizeof (nodes) / sizeof (nodes [0])
+static canNode_t* nodes [] =
+{
+	(canNode_t*) &charger
+};
 
 // Configuration --------------------------------------------------------------------------------------------------------------
 
@@ -24,7 +34,7 @@ static const CANConfig CAN1_CONFIG =
 	.btr =	CAN_BTR_SJW (1) |	// Max 2 TQ resynchronization jump.
 			CAN_BTR_TS2 (1) |	// 2 TQ for time segment 2
 			CAN_BTR_TS1 (10) |	// 11 TQ for time segment 1
-			CAN_BTR_BRP (2)		// Baudrate divisor of 3 (1 Mbps)
+			CAN_BTR_BRP (5)		// Baudrate divisor of 6 (500 kbps)
 };
 
 static const canThreadConfig_t CAN1_RX_THREAD_CONFIG =
@@ -32,14 +42,20 @@ static const canThreadConfig_t CAN1_RX_THREAD_CONFIG =
 	.name		= "can_1_rx",
 	.driver		= &CAND1,
 	.period		= TIME_MS2I (10),
-	.nodes		= NULL,
-	.nodeCount	= 0,
+	.nodes		= nodes,
+	.nodeCount	= NODE_COUNT,
 	.rxHandler	= &receiveBmsMessage
+};
+
+static const tcChargerConfig_t CHARGER_CONFIG =
+{
+	.driver			= &CAND1,
+	.timeoutPeriod	= TIME_MS2I (2000)
 };
 
 // Functions ------------------------------------------------------------------------------------------------------------------
 
-bool canVehicleInit (tprio_t priority)
+bool canChargerInit (tprio_t priority)
 {
 	// CAN 1 driver initialization
 	if (canStart (&CAND1, &CAN1_CONFIG) != MSG_OK)
@@ -47,6 +63,9 @@ bool canVehicleInit (tprio_t priority)
 
 	// Leave standby mode
 	palClearLine (LINE_CAN1_STBY);
+
+	// Initialize the CAN nodes
+	tcChargerInit (&charger, &CHARGER_CONFIG);
 
 	// Create the CAN RX thread
 	canThreadStart (can1RxThreadWa, sizeof (can1RxThreadWa), priority, &CAN1_RX_THREAD_CONFIG);

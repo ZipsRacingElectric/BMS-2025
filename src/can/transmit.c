@@ -3,20 +3,29 @@
 
 // Conversions -----------------------------------------------------------------------------------------------------------------
 
-// Voltage Values (V)
-#define VOLTAGE_INVERSE_FACTOR				(1024.0f / 8.0f)
-#define VOLTAGE_TO_WORD(voltage)			(uint16_t) ((voltage) * VOLTAGE_INVERSE_FACTOR)
+// Cell Voltage Values (V)
+#define CELL_VOLTAGE_INVERSE_FACTOR			(1024.0f / 8.0f)
+#define CELL_VOLTAGE_TO_WORD(voltage)		(uint16_t) ((voltage) * CELL_VOLTAGE_INVERSE_FACTOR)
 
 // Temperature Values (C)
 #define TEMPERATURE_INVERSE_FACTOR			(4096.0f / 256.0f)
 #define TEMPERATURE_TO_WORD(temperature)	(uint16_t) ((temperature) * TEMPERATURE_INVERSE_FACTOR)
 
+// Pack Voltage (V)
+#define PACK_VOLTAGE_INVERSE_FACTOR			(65536.0f / 819.2f)
+#define PACK_VOLTAGE_TO_WORD(voltage)		(uint16_t) ((voltage) * PACK_VOLTAGE_INVERSE_FACTOR)
+
+// Pack Current (A)
+#define PACK_CURRENT_INVERSE_FACTOR			(32768.0f / 625.0f)
+#define PACK_CURRENT_TO_WORD(current)		((int16_t) ((current) * PACK_CURRENT_INVERSE_FACTOR))
+
 // Message IDs ----------------------------------------------------------------------------------------------------------------
 
-#define STATUS_MESSAGE_ID			0x727
-#define VOLTAGE_MESSAGE_BASE_ID		0x700
-#define TEMPERATURE_MESSAGE_BASE_ID	0x718
-#define SENSE_LINE_STATUS_BASE_ID	0x724
+#define STATUS_MESSAGE_ID					0x727
+#define VOLTAGE_MESSAGE_BASE_ID				0x700
+#define TEMPERATURE_MESSAGE_BASE_ID			0x718
+#define SENSE_LINE_STATUS_BASE_ID			0x724
+#define POWER_MESSAGE_ID					0x728
 
 // Functions ------------------------------------------------------------------------------------------------------------------
 
@@ -92,7 +101,7 @@ msg_t transmitVoltageMessage (CANDriver* driver, sysinterval_t timeout, uint16_t
 	bool overvoltage = false;
 	for (uint8_t voltIndex = 0; voltIndex < 6; ++voltIndex)
 	{
-		voltages [voltIndex] = VOLTAGE_TO_WORD (ltcs [ltcIndex].cellVoltages [voltOffset + voltIndex]);
+		voltages [voltIndex] = CELL_VOLTAGE_TO_WORD (ltcs [ltcIndex].cellVoltages [voltOffset + voltIndex]);
 		undervoltage |= ltcs [ltcIndex].undervoltageFaults [voltOffset + voltIndex];
 		overvoltage |= ltcs [ltcIndex].overvoltageFaults [voltOffset + voltIndex];
 	}
@@ -185,6 +194,23 @@ msg_t transmitSenseLineStatusMessage (CANDriver* driver, sysinterval_t timeout, 
 	if (LTC_COUNT > ltcIndex + 3)
 		for (uint8_t bit = 0; bit < LTC6811_CELL_COUNT + 1; ++bit)
 			frame.data16 [3] |= ltcs [index + 3].openWireFaults [bit] << bit;
+
+	return canTransmitTimeout (driver, CAN_ANY_MAILBOX, &frame, timeout);
+}
+
+msg_t transmitPowerMessage (CANDriver* driver, sysinterval_t timeout)
+{
+	CANTxFrame frame =
+	{
+		.DLC	= 4,
+		.IDE	= CAN_IDE_STD,
+		.SID	= POWER_MESSAGE_ID,
+		.data16	=
+		{
+			PACK_VOLTAGE_TO_WORD (packVoltage),
+			PACK_CURRENT_TO_WORD (currentSensor.value)
+		}
+	};
 
 	return canTransmitTimeout (driver, CAN_ANY_MAILBOX, &frame, timeout);
 }

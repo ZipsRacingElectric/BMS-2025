@@ -24,6 +24,10 @@ ltc6811_t*		ltcBottom;
 
 thermistorPulldown_t thermistors [LTC_COUNT][LTC6811_GPIO_COUNT];
 
+stmAdc_t adc;
+
+linearSensor_t currentSensor;
+
 // Configuration --------------------------------------------------------------------------------------------------------------
 
 /// @brief Configuration for the I2C1 bus.
@@ -121,10 +125,30 @@ static const thermistorPulldownConfig_t THERMISTOR_CONFIG =
 	.temperatureMax			= 60
 };
 
+static const stmAdcConfig_t ADC_CONFIG =
+{
+	.driver			= &ADCD1,
+	.channels		= { ADC_CHANNEL_IN0 },
+	.channelCount	= 1,
+	.sensors		= { (analogSensor_t*) &currentSensor }
+};
+
+static const linearSensorConfig_t CURRENT_SENSOR_CONFIG =
+{
+	.sampleMin	= 0,
+	.sampleMax	= 4095,
+	.valueMin	= 0,
+	.valueMax	= 1
+};
+
 // Functions ------------------------------------------------------------------------------------------------------------------
 
 bool peripheralsInit (void)
 {
+	// ADC 1 initialization
+	if (!stmAdcInit (&adc, &ADC_CONFIG))
+		return false;
+
 	// I2C 1 driver initialization
 	if (i2cStart (&I2CD1, &I2C1_CONFIG) != MSG_OK)
 		return false;
@@ -151,6 +175,9 @@ void peripheralsReconfigure (void)
 	for (uint16_t deviceIndex = 0; deviceIndex < LTC_COUNT; ++deviceIndex)
 		for (uint16_t gpioIndex = 0; gpioIndex < LTC6811_GPIO_COUNT; ++gpioIndex)
 			thermistorPulldownInit (&thermistors [deviceIndex][gpioIndex], &THERMISTOR_CONFIG);
+
+	// Current sensor initialization
+	linearSensorInit (&currentSensor, &CURRENT_SENSOR_CONFIG);
 }
 
 void peripheralsSample (void)
@@ -188,4 +215,7 @@ void peripheralsSample (void)
 
 	bmsFault = undervoltageFault || overtemperatureFault || senseLineFault || isoSpiFault || senseLineFault ||
 		undertemperatureFault || overtemperatureFault;
+
+	// Sample the current sensor
+	stmAdcSample (&adc);
 }

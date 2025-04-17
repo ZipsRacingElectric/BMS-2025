@@ -26,7 +26,7 @@
         Level="High"
         Speed="Minimum"
         Resistor="Floating"
-        Mode="Input"
+        Mode="Analog"
         Alternate="0" />
       <pin1
         ID="CS_HIGH"

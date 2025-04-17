@@ -33,8 +33,11 @@ include common/src/debug.mk
 include common/src/fault_handler.mk
 
 include common/src/can/can_thread.mk
+include common/src/can/can_node.mk
 
+include common/src/peripherals/analog_linear.mk
 include common/src/peripherals/mc24lc32.mk
+include common/src/peripherals/stm_adc.mk
 include common/src/peripherals/thermistor_pulldown.mk
 
 # Compiler flags

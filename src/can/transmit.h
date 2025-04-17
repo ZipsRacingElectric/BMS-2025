@@ -53,4 +53,7 @@ msg_t transmitTemperatureMessage (CANDriver* driver, sysinterval_t timeout, uint
  */
 msg_t transmitSenseLineStatusMessage (CANDriver* driver, sysinterval_t timeout, uint16_t index);
 
+// TODO(Barach): Docs
+msg_t transmitPowerMessage (CANDriver* driver, sysinterval_t timeout);
+
 #endif // TRANSMIT_H

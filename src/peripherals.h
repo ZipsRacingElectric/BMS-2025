@@ -7,13 +7,17 @@
 // Date Created: 2025.02.20
 //
 // Description: Global objects representing the grounded low-voltage hardware of the BMS.
+//
+// TODO(Barach): Move configs to EEPROM.
 
 // Includes -------------------------------------------------------------------------------------------------------------------
 
 // Includes
+#include "peripherals/analog_linear.h"
 #include "peripherals/eeprom_map.h"
 #include "peripherals/ltc6811.h"
 #include "peripherals/mc24lc32.h"
+#include "peripherals/stm_adc.h"
 #include "peripherals/thermistor_pulldown.h"
 
 // Constants ------------------------------------------------------------------------------------------------------------------
@@ -43,10 +47,18 @@ extern mc24lc32_t eeprom;
 /// @brief Structure mapping the EEPROM's contents to C datatypes.
 extern eepromMap_t* eepromMap;
 
+// TODO(Barach): Docs
 extern ltc6811_t ltcs [LTC_COUNT];
 extern ltc6811_t* ltcBottom;
 
+// TODO(Barach): Docs
 extern thermistorPulldown_t thermistors [LTC_COUNT][LTC6811_GPIO_COUNT];
+
+/// @brief The STM's on-board ADC, used for sampling the current sensor.
+extern stmAdc_t adc;
+
+/// @brief The accumulator's pack current sensor.
+extern linearSensor_t currentSensor;
 
 // Functions ------------------------------------------------------------------------------------------------------------------
 

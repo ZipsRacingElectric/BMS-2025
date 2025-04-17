@@ -17,11 +17,10 @@
 
 typedef enum
 {
-	TC_CHARGER_INPUT_VOLTAGE_NORMAL		= 0b00,
-	TC_CHARGER_INPUT_VOLTAGE_UNDER_VOLT	= 0b01,
-	TC_CHARGER_INPUT_VOLTAGE_OVER_VOLT	= 0b10,
-	TC_CHARGER_INPUT_VOLTAGE_NO_INPUT	= 0b11
-} tcChargerInputVoltageStatus_t;
+	TC_CHARGER_FAULTED	= 0,
+	TC_CHARGER_IDLE		= 1,
+	TC_CHARGER_CHARGING	= 2
+} tcChargingState_t;
 
 typedef struct
 {
@@ -33,15 +32,15 @@ typedef struct
 {
 	CAN_NODE_FIELDS;
 
+	const tcChargerConfig_t* config;
+
+	tcChargingState_t chargingState;
 	float outputVoltage;
 	float outputCurrent;
-	bool hardwareProtection;
-	bool temperatureProtection;
-	tcChargerInputVoltageStatus_t inputVoltageStatus;
 } tcCharger_t;
 
 // Functions ------------------------------------------------------------------------------------------------------------------
 
-void tcChargerInit (tcCharger_t* charger, tcChargerConfig_t* config);
+void tcChargerInit (tcCharger_t* charger, const tcChargerConfig_t* config);
 
 #endif // TC_HK_LF_540_14_H

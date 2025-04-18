@@ -26,7 +26,7 @@ thermistorPulldown_t thermistors [LTC_COUNT][LTC6811_GPIO_COUNT];
 
 stmAdc_t adc;
 
-linearSensor_t currentSensor;
+dhabS124_t currentSensor;
 
 // Configuration --------------------------------------------------------------------------------------------------------------
 
@@ -128,17 +128,37 @@ static const thermistorPulldownConfig_t THERMISTOR_CONFIG =
 static const stmAdcConfig_t ADC_CONFIG =
 {
 	.driver			= &ADCD1,
-	.channels		= { ADC_CHANNEL_IN0 },
-	.channelCount	= 1,
-	.sensors		= { (analogSensor_t*) &currentSensor }
+	.channels		=
+	{
+		ADC_CHANNEL_IN0,
+		ADC_CHANNEL_IN1
+	},
+	.channelCount	= 2,
+	.sensors		=
+	{
+		(analogSensor_t*) &currentSensor.channel1,
+		(analogSensor_t*) &currentSensor.channel2
+	}
 };
 
-static const linearSensorConfig_t CURRENT_SENSOR_CONFIG =
+// TODO(Barach): Move to EEPROM and calibrate this.
+static const dhabS124Config_t CURRENT_SENSOR_CONFIG =
 {
-	.sampleMin	= 0,
-	.sampleMax	= 4095,
-	.valueMin	= 0,
-	.valueMax	= 1
+	.channel1Config =
+	{
+		.sampleMin		= 0,
+		.sampleMax		= 4095,
+		.sampleOffset	= 2048,
+		.sensitivity	= 0.0267f
+	},
+	.channel2Config =
+	{
+		.sampleMin		= 0,
+		.sampleMax		= 4095,
+		.sampleOffset	= 2048,
+		.sensitivity	= 0.004f
+	},
+	.channel1SaturationCurrent = 75.0f
 };
 
 // Functions ------------------------------------------------------------------------------------------------------------------
@@ -177,7 +197,7 @@ void peripheralsReconfigure (void)
 			thermistorPulldownInit (&thermistors [deviceIndex][gpioIndex], &THERMISTOR_CONFIG);
 
 	// Current sensor initialization
-	linearSensorInit (&currentSensor, &CURRENT_SENSOR_CONFIG);
+	dhabS124Init (&currentSensor, &CURRENT_SENSOR_CONFIG);
 }
 
 void peripheralsSample (void)

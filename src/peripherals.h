@@ -13,7 +13,7 @@
 // Includes -------------------------------------------------------------------------------------------------------------------
 
 // Includes
-#include "peripherals/analog_linear.h"
+#include "peripherals/dhab_s124.h"
 #include "peripherals/eeprom_map.h"
 #include "peripherals/ltc6811.h"
 #include "peripherals/mc24lc32.h"
@@ -58,7 +58,7 @@ extern thermistorPulldown_t thermistors [LTC_COUNT][LTC6811_GPIO_COUNT];
 extern stmAdc_t adc;
 
 /// @brief The accumulator's pack current sensor.
-extern linearSensor_t currentSensor;
+extern dhabS124_t currentSensor;
 
 // Functions ------------------------------------------------------------------------------------------------------------------
 

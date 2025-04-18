@@ -20,7 +20,7 @@ static void update (dhabS124_t* sensor);
 
 // Functions ------------------------------------------------------------------------------------------------------------------
 
-void dhabS124Init (dhabS124_t* sensor, const dhabS124Config_t* config)
+bool dhabS124Init (dhabS124_t* sensor, const dhabS124Config_t* config)
 {
 	// Store the configurations
 	sensor->config = config;
@@ -28,6 +28,29 @@ void dhabS124Init (dhabS124_t* sensor, const dhabS124Config_t* config)
 	sensor->channel2.config = &config->channel2Config;
 	sensor->channel1.callback = callback;
 	sensor->channel2.callback = callback;
+	sensor->channel1.parent = sensor;
+	sensor->channel2.parent = sensor;
+
+	// Validate the configurations
+	if (config->channel1Config.sampleMin >= config->channel1Config.sampleMax)
+		sensor->channel1.state = ANALOG_SENSOR_CONFIG_INVALID;
+	else
+		sensor->channel1.state = ANALOG_SENSOR_SAMPLE_INVALID;
+
+	if (config->channel2Config.sampleMin >= config->channel2Config.sampleMax)
+		sensor->channel2.state = ANALOG_SENSOR_CONFIG_INVALID;
+	else
+		sensor->channel2.state = ANALOG_SENSOR_SAMPLE_INVALID;
+
+	// Set values to their defaults
+	sensor->value = 0.0f;
+	sensor->channel1.value = 0.0f;
+	sensor->channel1.sample = 0;
+	sensor->channel2.value = 0.0f;
+	sensor->channel2.sample = 0;
+
+	return sensor->channel1.state != ANALOG_SENSOR_CONFIG_INVALID ||
+		sensor->channel2.state != ANALOG_SENSOR_CONFIG_INVALID;
 }
 
 void callback (void* object, uint16_t sample, uint16_t sampleVdd)
@@ -64,5 +87,9 @@ static void update (dhabS124_t* sensor)
 	// Prioritize channel 1, if saturated, switch to channel 2.
 	bool channel1Saturated = sensor->channel1.value > sensor->config->channel1SaturationCurrent
 		|| sensor->channel1.value < -sensor->config->channel1SaturationCurrent;
-	sensor->value = channel1Saturated ? sensor->channel2.value : sensor->channel1.value;
+
+	if (channel1Saturated)
+		sensor->value = sensor->channel2.value;
+	else
+		sensor->value = sensor->channel1.value;
 }

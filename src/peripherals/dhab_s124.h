@@ -82,6 +82,6 @@ typedef struct dhabS124 dhabS124_t;
 
 // Functions ------------------------------------------------------------------------------------------------------------------
 
-void dhabS124Init (dhabS124_t* sensor, const dhabS124Config_t* config);
+bool dhabS124Init (dhabS124_t* sensor, const dhabS124Config_t* config);
 
 #endif // DHAB_S124_H

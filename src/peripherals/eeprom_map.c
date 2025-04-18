@@ -2,6 +2,7 @@
 #include "eeprom_map.h"
 
 // Includes
+#include "peripherals.h"
 #include "watchdog.h"
 
 // C Standard Library
@@ -12,17 +13,20 @@
 #define READONLY_COUNT (sizeof (READONLY_ADDRS) / sizeof (READONLY_ADDRS [0]))
 static const uint16_t READONLY_ADDRS [] =
 {
-
+	0x0000,
+	0x0002
 };
 
 static const void* READONLY_DATA [READONLY_COUNT] =
 {
-
+	&currentSensor.channel1.sample,
+	&currentSensor.channel2.sample,
 };
 
 static const uint16_t READONLY_SIZES [READONLY_COUNT] =
 {
-
+	sizeof (uint16_t),
+	sizeof (uint16_t)
 };
 
 // Functions ------------------------------------------------------------------------------------------------------------------

@@ -59,6 +59,11 @@ void transmitBmsMessages (sysinterval_t timeout)
 		timeout = chTimeDiffX (timeCurrent, timeDeadline);
 		transmitSenseLineStatusMessage (&CAND1, timeout, index);
 	}
+
+	// Power message
+	timeCurrent = chVTGetSystemTimeX ();
+	timeout = chTimeDiffX (timeCurrent, timeDeadline);
+	transmitPowerMessage (&CAND1, timeout);
 }
 
 msg_t transmitStatusMessage (CANDriver* driver, sysinterval_t timeout)

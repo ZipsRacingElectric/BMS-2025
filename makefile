@@ -14,19 +14,20 @@ BOARDDIR := ./build/board
 ALLINC += src
 
 # Source files
-CSRC =	$(ALLCSRC)					\
-		src/main.c					\
-									\
-		src/peripherals.c			\
-		src/peripherals/dhab_s124.c	\
-		src/peripherals/ltc6811.c	\
-									\
-		src/can_charger.c			\
-		src/can_vehicle.c			\
-		src/can/receive.c			\
-		src/can/tc_hk_lf_540_14.c	\
-		src/can/transmit.c			\
-									\
+CSRC =	$(ALLCSRC)						\
+		src/main.c						\
+										\
+		src/peripherals.c				\
+		src/peripherals/dhab_s124.c		\
+		src/peripherals/eeprom_map.c	\
+		src/peripherals/ltc6811.c		\
+										\
+		src/can_charger.c				\
+		src/can_vehicle.c				\
+		src/can/receive.c				\
+		src/can/tc_hk_lf_540_14.c		\
+		src/can/transmit.c				\
+										\
 		src/watchdog.c
 
 # Common library includes
@@ -35,8 +36,10 @@ include common/src/fault_handler.mk
 
 include common/src/can/can_thread.mk
 include common/src/can/can_node.mk
+include common/src/can/eeprom_can.mk
 
 include common/src/peripherals/analog_linear.mk
+include common/src/peripherals/eeprom.mk
 include common/src/peripherals/mc24lc32.mk
 include common/src/peripherals/stm_adc.mk
 include common/src/peripherals/thermistor_pulldown.mk

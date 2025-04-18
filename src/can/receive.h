@@ -13,6 +13,8 @@
 // ChibiOS
 #include "hal.h"
 
+// Functions ------------------------------------------------------------------------------------------------------------------
+
 int8_t receiveBmsMessage (void* arg, CANRxFrame* frame);
 
 #endif // RECEIVE_H

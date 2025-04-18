@@ -41,21 +41,23 @@ extern bool selfTestFault;
 
 // Global Peripherals ---------------------------------------------------------------------------------------------------------
 
-/// @brief The BMS's EEPROM. This is responsible for storing all non-volatile variables.
-extern mc24lc32_t eeprom;
+/// @brief The BMS's hardware (on-board) EEPROM. This is responsible for storing all non-volatile variables.
+extern mc24lc32_t hardwareEeprom;
 
-/// @brief Structure mapping the EEPROM's contents to C datatypes.
-extern eepromMap_t* eepromMap;
+/// @brief Structure mapping the hardware EEPROM's contents to C datatypes.
+extern eepromMap_t* hardwareEepromMap;
+
+// TODO(Barach): Docs
+extern virtualEeprom_t virtualEeprom;
 
 // TODO(Barach): Docs
 extern ltc6811_t ltcs [LTC_COUNT];
+
+// TODO(Barach): Docs
 extern ltc6811_t* ltcBottom;
 
 // TODO(Barach): Docs
 extern thermistorPulldown_t thermistors [LTC_COUNT][LTC6811_GPIO_COUNT];
-
-/// @brief The STM's on-board ADC, used for sampling the current sensor.
-extern stmAdc_t adc;
 
 /// @brief The accumulator's pack current sensor.
 extern dhabS124_t currentSensor;

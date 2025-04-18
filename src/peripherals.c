@@ -16,21 +16,20 @@ bool selfTestFault = true;
 
 // Global Peripherals ---------------------------------------------------------------------------------------------------------
 
-mc24lc32_t		eeprom;
-eepromMap_t*	eepromMap;
-
-ltc6811_t		ltcs [LTC_COUNT];
-ltc6811_t*		ltcBottom;
-
-thermistorPulldown_t thermistors [LTC_COUNT][LTC6811_GPIO_COUNT];
+mc24lc32_t				hardwareEeprom;
+eepromMap_t*			hardwareEepromMap;
+virtualEeprom_t			virtualEeprom;
+ltc6811_t				ltcs [LTC_COUNT];
+ltc6811_t*				ltcBottom;
+thermistorPulldown_t	thermistors [LTC_COUNT][LTC6811_GPIO_COUNT];
+dhabS124_t				currentSensor;
 
 stmAdc_t adc;
-
-dhabS124_t currentSensor;
+eeprom_t readonlyWriteonlyEeprom;
 
 // Configuration --------------------------------------------------------------------------------------------------------------
 
-/// @brief Configuration for the I2C1 bus.
+/// @brief Configuration for the I2C 1 bus.
 static const I2CConfig I2C1_CONFIG =
 {
 	.op_mode		= OPMODE_I2C,
@@ -38,13 +37,49 @@ static const I2CConfig I2C1_CONFIG =
 	.duty_cycle		= FAST_DUTY_CYCLE_2
 };
 
-/// @brief Configuration for the on-board EEPROM.
-static const mc24lc32Config_t EEPROM_CONFIG =
+/// @brief Configuration for the ADC 1 peripheral.
+static const stmAdcConfig_t ADC_CONFIG =
+{
+	.driver			= &ADCD1,
+	.channels		=
+	{
+		ADC_CHANNEL_IN0,
+		ADC_CHANNEL_IN1
+	},
+	.channelCount	= 2,
+	.sensors		=
+	{
+		(analogSensor_t*) &currentSensor.channel1,
+		(analogSensor_t*) &currentSensor.channel2
+	}
+};
+
+/// @brief Configuration for the hardware EEPROM.
+static const mc24lc32Config_t HARDWARE_EEPROM_CONFIG =
 {
 	.addr			= 0x50,
 	.i2c			= &I2CD1,
 	.timeout		= TIME_MS2I (500),
 	.magicString	= EEPROM_MAP_STRING
+};
+
+/// @brief Configuration for the BMS's virtual memory.
+static const virtualEepromConfig_t VIRTUAL_EEPROM_CONFIG =
+{
+	.count		= 2,
+	.entries	=
+	{
+		{
+			.eeprom	= (eeprom_t*) &hardwareEeprom,
+			.addr	= 0x0000,
+			.size	= 0x1000,
+		},
+		{
+			.eeprom = &readonlyWriteonlyEeprom,
+			.addr	= 0x1000,
+			.size	= 0x1000
+		}
+	}
 };
 
 /// @brief Configuration for the LTC daisy chain.
@@ -70,11 +105,11 @@ static const ltc6811Config_t DAISY_CHAIN_CONFIG =
 	.gpioAdcMode			= LTC6811_ADC_26HZ,
 	.openWireTestIterations	= 3,
 	.faultCount				= 6,
-	.cellVoltageMax			= 4.1,
+	.cellVoltageMax			= 4.1, // TODO(Barach): Actual values
 	.cellVoltageMin			= 2.7,
 	.gpioSensors =
 	{
-		{
+		{ // TODO(Barach): Really not a fan of this setup.
 			(analogSensor_t*) &thermistors [1][0],
 			(analogSensor_t*) &thermistors [1][1],
 			(analogSensor_t*) &thermistors [1][2],
@@ -87,16 +122,11 @@ static const ltc6811Config_t DAISY_CHAIN_CONFIG =
 			(analogSensor_t*) &thermistors [0][2],
 			(analogSensor_t*) &thermistors [0][3],
 			(analogSensor_t*) &thermistors [0][4],
-		},
-		{
-			NULL, NULL, NULL, NULL, NULL
-		},
-		{
-			NULL, NULL, NULL, NULL, NULL
 		}
 	},
 };
 
+// TODO(Barach): Docs
 static ltc6811_t* const DAISY_CHAIN [] =
 {
 	&ltcs [1],
@@ -113,54 +143,6 @@ static ltc6811_t* const DAISY_CHAIN [] =
 	&ltcs [10]
 };
 
-static const thermistorPulldownConfig_t THERMISTOR_CONFIG =
-{
-	.steinhartHartA			= 1.1384e-3,
-	.steinhartHartB			= 2.3245e-4,
-	.steinhartHartC			= 0,
-	.steinhartHartD			= 9.489e-8,
-	.resistanceReference	= 1,
-	.resistancePullup		= 10000,
-	.temperatureMin			= -10,
-	.temperatureMax			= 60
-};
-
-static const stmAdcConfig_t ADC_CONFIG =
-{
-	.driver			= &ADCD1,
-	.channels		=
-	{
-		ADC_CHANNEL_IN0,
-		ADC_CHANNEL_IN1
-	},
-	.channelCount	= 2,
-	.sensors		=
-	{
-		(analogSensor_t*) &currentSensor.channel1,
-		(analogSensor_t*) &currentSensor.channel2
-	}
-};
-
-// TODO(Barach): Move to EEPROM and calibrate this.
-static const dhabS124Config_t CURRENT_SENSOR_CONFIG =
-{
-	.channel1Config =
-	{
-		.sampleMin		= 0,
-		.sampleMax		= 4095,
-		.sampleOffset	= 2048,
-		.sensitivity	= 0.0267f
-	},
-	.channel2Config =
-	{
-		.sampleMin		= 0,
-		.sampleMax		= 4095,
-		.sampleOffset	= 2048,
-		.sensitivity	= 0.004f
-	},
-	.channel1SaturationCurrent = 75.0f
-};
-
 // Functions ------------------------------------------------------------------------------------------------------------------
 
 bool peripheralsInit (void)
@@ -173,10 +155,16 @@ bool peripheralsInit (void)
 	if (i2cStart (&I2CD1, &I2C1_CONFIG) != MSG_OK)
 		return false;
 
-	// EEPROM initialization
-	if (!mc24lc32Init (&eeprom, &EEPROM_CONFIG) && eeprom.state == MC24LC32_STATE_FAILED)
+	// Hardware EEPROM initialization
+	if (!mc24lc32Init (&hardwareEeprom, &HARDWARE_EEPROM_CONFIG) && hardwareEeprom.state == MC24LC32_STATE_FAILED)
 		return false;
-	eepromMap = (eepromMap_t*) eeprom.cache;
+	hardwareEepromMap = (eepromMap_t*) hardwareEeprom.cache;
+
+	// Readonly/Writeonly EEPROM initialization
+	eepromInit (&readonlyWriteonlyEeprom, eepromWriteonlyWrite, eepromReadonlyRead);
+
+	// Virtual EEPROM initialization
+	virtualEepromInit (&virtualEeprom, &VIRTUAL_EEPROM_CONFIG);
 
 	// Reconfigurable peripheral initializations. Note this must occur before the LTC initialization as the LTCs are dependent
 	// on the thermistor peripherals.
@@ -194,10 +182,10 @@ void peripheralsReconfigure (void)
 	// Thermistor initialization
 	for (uint16_t deviceIndex = 0; deviceIndex < LTC_COUNT; ++deviceIndex)
 		for (uint16_t gpioIndex = 0; gpioIndex < LTC6811_GPIO_COUNT; ++gpioIndex)
-			thermistorPulldownInit (&thermistors [deviceIndex][gpioIndex], &THERMISTOR_CONFIG);
+			thermistorPulldownInit (&thermistors [deviceIndex][gpioIndex], &hardwareEepromMap->thermistorConfig);
 
 	// Current sensor initialization
-	dhabS124Init (&currentSensor, &CURRENT_SENSOR_CONFIG);
+	dhabS124Init (&currentSensor, &hardwareEepromMap->currentSensorConfig);
 }
 
 void peripheralsSample (void)

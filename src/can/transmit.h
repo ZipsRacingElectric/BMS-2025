@@ -21,10 +21,27 @@
 
 // Functions ------------------------------------------------------------------------------------------------------------------
 
+/**
+ * @brief Transmits all of the BMS's regular CAN messages: status, power, cell voltages, temperatures, and sense-line statuses.
+ * @param timeout The interval to timeout after.
+ */
 void transmitBmsMessages (sysinterval_t timeout);
 
-// TODO(Barach): Docs
+/**
+ * @brief Transmits the BMS status message based on the current fault conditions.
+ * @param driver The CAN driver to use.
+ * @param timeout The interval to timeout after.
+ * @return The result of the CAN operation.
+ */
 msg_t transmitStatusMessage (CANDriver* driver, sysinterval_t timeout);
+
+/**
+ * @brief Transmits the BMS power consumption message.
+ * @param driver The CAN driver to use.
+ * @param timeout The interval to timeout after.
+ * @return The result of the CAN operation.
+ */
+msg_t transmitPowerMessage (CANDriver* driver, sysinterval_t timeout);
 
 /**
  * @brief Transmits a cell voltage message based on the current cell voltages.
@@ -52,8 +69,5 @@ msg_t transmitTemperatureMessage (CANDriver* driver, sysinterval_t timeout, uint
  * @return The result of the CAN operation.
  */
 msg_t transmitSenseLineStatusMessage (CANDriver* driver, sysinterval_t timeout, uint16_t index);
-
-// TODO(Barach): Docs
-msg_t transmitPowerMessage (CANDriver* driver, sysinterval_t timeout);
 
 #endif // TRANSMIT_H

@@ -36,6 +36,10 @@ void transmitBmsMessages (sysinterval_t timeout)
 	systime_t timeDeadline = chTimeAddX (timeCurrent, timeout);
 	transmitStatusMessage (&CAND1, timeout);
 
+	// Power message
+	timeCurrent = chVTGetSystemTimeX ();
+	timeout = chTimeDiffX (timeCurrent, timeDeadline);
+
 	// Cell voltage messages
 	for (uint16_t index = 0; index < VOLTAGE_MESSAGE_COUNT; ++index)
 	{
@@ -60,9 +64,6 @@ void transmitBmsMessages (sysinterval_t timeout)
 		transmitSenseLineStatusMessage (&CAND1, timeout, index);
 	}
 
-	// Power message
-	timeCurrent = chVTGetSystemTimeX ();
-	timeout = chTimeDiffX (timeCurrent, timeDeadline);
 	transmitPowerMessage (&CAND1, timeout);
 }
 
@@ -92,6 +93,23 @@ msg_t transmitStatusMessage (CANDriver* driver, sysinterval_t timeout)
 	// Self test faults
 	for (uint8_t index = 0; index < LTC_COUNT; ++index)
 		frame.data16 [2] |= (ltcs [index].state == LTC6811_STATE_SELF_TEST_FAULT) << index;
+
+	return canTransmitTimeout (driver, CAN_ANY_MAILBOX, &frame, timeout);
+}
+
+msg_t transmitPowerMessage (CANDriver* driver, sysinterval_t timeout)
+{
+	CANTxFrame frame =
+	{
+		.DLC	= 4,
+		.IDE	= CAN_IDE_STD,
+		.SID	= POWER_MESSAGE_ID,
+		.data16	=
+		{
+			PACK_VOLTAGE_TO_WORD (packVoltage),
+			PACK_CURRENT_TO_WORD (currentSensor.value)
+		}
+	};
 
 	return canTransmitTimeout (driver, CAN_ANY_MAILBOX, &frame, timeout);
 }
@@ -199,23 +217,6 @@ msg_t transmitSenseLineStatusMessage (CANDriver* driver, sysinterval_t timeout, 
 	if (LTC_COUNT > ltcIndex + 3)
 		for (uint8_t bit = 0; bit < LTC6811_CELL_COUNT + 1; ++bit)
 			frame.data16 [3] |= ltcs [index + 3].openWireFaults [bit] << bit;
-
-	return canTransmitTimeout (driver, CAN_ANY_MAILBOX, &frame, timeout);
-}
-
-msg_t transmitPowerMessage (CANDriver* driver, sysinterval_t timeout)
-{
-	CANTxFrame frame =
-	{
-		.DLC	= 4,
-		.IDE	= CAN_IDE_STD,
-		.SID	= POWER_MESSAGE_ID,
-		.data16	=
-		{
-			PACK_VOLTAGE_TO_WORD (packVoltage),
-			PACK_CURRENT_TO_WORD (currentSensor.value)
-		}
-	};
 
 	return canTransmitTimeout (driver, CAN_ANY_MAILBOX, &frame, timeout);
 }

@@ -6,7 +6,8 @@
 // Author: Cole Barach
 // Date Created: 2025.04.16
 //
-// Description: TODO(Barach)
+// Description: CAN interface for when the accumulator is on the charger. This bus runs at 500 kbps as opposed to the vehicle
+//   at 1 Mbps.
 
 // Includes -------------------------------------------------------------------------------------------------------------------
 

@@ -26,9 +26,6 @@
 
 void hardFaultCallback (void)
 {
-	// TODO(Barach):
-	// Fault handler implementation
-
 	// Open the shutdown loop
 	palWriteLine (LINE_BMS_FLT, false);
 }

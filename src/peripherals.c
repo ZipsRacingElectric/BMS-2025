@@ -1,10 +1,12 @@
 // Header
 #include "peripherals.h"
 
+// Includes
+#include "peripherals/stm_adc.h"
+
 // Global State ---------------------------------------------------------------------------------------------------------------
 
 float packVoltage = 0.0f;
-
 bool bmsFault = true;
 bool undervoltageFault = true;
 bool overvoltageFault = true;
@@ -16,6 +18,7 @@ bool selfTestFault = true;
 
 // Global Peripherals ---------------------------------------------------------------------------------------------------------
 
+// Public
 mc24lc32_t				hardwareEeprom;
 eepromMap_t*			hardwareEepromMap;
 virtualEeprom_t			virtualEeprom;
@@ -24,8 +27,9 @@ ltc6811_t*				ltcBottom;
 thermistorPulldown_t	thermistors [LTC_COUNT][LTC6811_GPIO_COUNT];
 dhabS124_t				currentSensor;
 
-stmAdc_t adc;
-eeprom_t readonlyWriteonlyEeprom;
+// Private
+stmAdc_t				adc;
+eeprom_t				readonlyWriteonlyEeprom;
 
 // Configuration --------------------------------------------------------------------------------------------------------------
 
@@ -100,16 +104,19 @@ static const ltc6811Config_t DAISY_CHAIN_CONFIG =
 		.sspad				= PAL_PAD (LINE_CS_ISOSPI)		//
 	},
 	.spiMiso				= LINE_SPI1_MISO,
-	.readAttemptCount		= 5,
-	.cellAdcMode			= LTC6811_ADC_422HZ, // TODO(Barach): Should be 26Hz
-	.gpioAdcMode			= LTC6811_ADC_26HZ,
-	.openWireTestIterations	= 3,
-	.faultCount				= 6,
-	.cellVoltageMax			= 4.1, // TODO(Barach): Actual values
-	.cellVoltageMin			= 2.7,
+	.readAttemptCount		= 5,							// Fail after 5 invalid read attempts.
+	.cellAdcMode			= LTC6811_ADC_422HZ,			// TODO(Barach): Figure out 26 Hz. 26 Hz ADC sampling for cell voltages.
+	.gpioAdcMode			= LTC6811_ADC_422HZ,			// TODO(Barach): Figure out 26 Hz. 26 Hz ADC sampling for the thermistors.
+	.openWireTestIterations	= 3,							// Perform 3 pull-up / pull-down commands before measuring.
+	.faultCount				= 6,							// Maximum of 6 continuous faults allowed. At a sampling rate of
+															// 2 Hz, this is 3 seconds.
+	.cellVoltageMax			= 4.16,							// Maximum voltage for the COSMX 95B0D0HD, any high exceeds a pack
+															// voltage of 600V and is therefore illegal.
+	.cellVoltageMin			= 3,							// Minimum voltage for the COSMX 95B0D0HD, any lower is below the
+															// acceptable voltage range.
 	.gpioSensors =
 	{
-		{ // TODO(Barach): Really not a fan of this setup.
+		{
 			(analogSensor_t*) &thermistors [1][0],
 			(analogSensor_t*) &thermistors [1][1],
 			(analogSensor_t*) &thermistors [1][2],
@@ -122,11 +129,81 @@ static const ltc6811Config_t DAISY_CHAIN_CONFIG =
 			(analogSensor_t*) &thermistors [0][2],
 			(analogSensor_t*) &thermistors [0][3],
 			(analogSensor_t*) &thermistors [0][4],
+		},
+		{
+			(analogSensor_t*) &thermistors [3][0],
+			(analogSensor_t*) &thermistors [3][1],
+			(analogSensor_t*) &thermistors [3][2],
+			(analogSensor_t*) &thermistors [3][3],
+			(analogSensor_t*) &thermistors [3][4],
+		},
+		{
+			(analogSensor_t*) &thermistors [2][0],
+			(analogSensor_t*) &thermistors [2][1],
+			(analogSensor_t*) &thermistors [2][2],
+			(analogSensor_t*) &thermistors [2][3],
+			(analogSensor_t*) &thermistors [2][4],
+		},
+		{
+			(analogSensor_t*) &thermistors [5][0],
+			(analogSensor_t*) &thermistors [5][1],
+			(analogSensor_t*) &thermistors [5][2],
+			(analogSensor_t*) &thermistors [5][3],
+			(analogSensor_t*) &thermistors [5][4],
+		},
+		{
+			(analogSensor_t*) &thermistors [4][0],
+			(analogSensor_t*) &thermistors [4][1],
+			(analogSensor_t*) &thermistors [4][2],
+			(analogSensor_t*) &thermistors [4][3],
+			(analogSensor_t*) &thermistors [4][4],
+		},
+		{
+			(analogSensor_t*) &thermistors [7][0],
+			(analogSensor_t*) &thermistors [7][1],
+			(analogSensor_t*) &thermistors [7][2],
+			(analogSensor_t*) &thermistors [7][3],
+			(analogSensor_t*) &thermistors [7][4],
+		},
+		{
+			(analogSensor_t*) &thermistors [6][0],
+			(analogSensor_t*) &thermistors [6][1],
+			(analogSensor_t*) &thermistors [6][2],
+			(analogSensor_t*) &thermistors [6][3],
+			(analogSensor_t*) &thermistors [6][4],
+		},
+		{
+			(analogSensor_t*) &thermistors [9][0],
+			(analogSensor_t*) &thermistors [9][1],
+			(analogSensor_t*) &thermistors [9][2],
+			(analogSensor_t*) &thermistors [9][3],
+			(analogSensor_t*) &thermistors [9][4],
+		},
+		{
+			(analogSensor_t*) &thermistors [8][0],
+			(analogSensor_t*) &thermistors [8][1],
+			(analogSensor_t*) &thermistors [8][2],
+			(analogSensor_t*) &thermistors [8][3],
+			(analogSensor_t*) &thermistors [8][4],
+		},
+		{
+			(analogSensor_t*) &thermistors [11][0],
+			(analogSensor_t*) &thermistors [11][1],
+			(analogSensor_t*) &thermistors [11][2],
+			(analogSensor_t*) &thermistors [11][3],
+			(analogSensor_t*) &thermistors [11][4],
+		},
+		{
+			(analogSensor_t*) &thermistors [10][0],
+			(analogSensor_t*) &thermistors [10][1],
+			(analogSensor_t*) &thermistors [10][2],
+			(analogSensor_t*) &thermistors [10][3],
+			(analogSensor_t*) &thermistors [10][4],
 		}
 	},
 };
 
-// TODO(Barach): Docs
+/// @brief The LTC IsoSPI daisy-chain, used to accomodate for changes to the IsoSPI wiring.
 static ltc6811_t* const DAISY_CHAIN [] =
 {
 	&ltcs [1],
@@ -160,7 +237,7 @@ bool peripheralsInit (void)
 		return false;
 	hardwareEepromMap = (eepromMap_t*) hardwareEeprom.cache;
 
-	// Readonly/Writeonly EEPROM initialization
+	// Readonly / Writeonly EEPROM initialization
 	eepromInit (&readonlyWriteonlyEeprom, eepromWriteonlyWrite, eepromReadonlyRead);
 
 	// Virtual EEPROM initialization

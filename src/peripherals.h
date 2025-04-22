@@ -7,8 +7,6 @@
 // Date Created: 2025.02.20
 //
 // Description: Global objects representing the grounded low-voltage hardware of the BMS.
-//
-// TODO(Barach): Move configs to EEPROM.
 
 // Includes -------------------------------------------------------------------------------------------------------------------
 
@@ -17,26 +15,46 @@
 #include "peripherals/eeprom_map.h"
 #include "peripherals/ltc6811.h"
 #include "peripherals/mc24lc32.h"
-#include "peripherals/stm_adc.h"
 #include "peripherals/thermistor_pulldown.h"
 
 // Constants ------------------------------------------------------------------------------------------------------------------
 
+/// @brief The number of LTC BMS ICs in the daisy-chain. Note this must be even.
 #define LTC_COUNT 2
+
+/// @brief The number of cells in the accumulator.
 #define CELL_COUNT (LTC_COUNT * LTC6811_CELL_COUNT)
+
+/// @brief The number of temperature sensors in the accumulator.
 #define TEMP_COUNT (LTC_COUNT * LTC6811_GPIO_COUNT)
 
 // Global State ---------------------------------------------------------------------------------------------------------------
 
+/// @brief The voltage of the entire pack, as measured by the LTCs.
 extern float packVoltage;
 
+/// @brief Indicates whether any faults are present.
 extern bool bmsFault;
+
+/// @brief Indicates an undervoltage fault is present.
 extern bool undervoltageFault;
+
+/// @brief Indicates an overvoltage fault is present.
 extern bool overvoltageFault;
+
+/// @brief Indicates an undertemperature fault is present.
 extern bool undertemperatureFault;
+
+/// @brief Indicates an overtemperature fault is present.
 extern bool overtemperatureFault;
+
+/// @brief Indicates a sense-line fault is present.
 extern bool senseLineFault;
+
+/// @brief Indicates an IsoSPI fault is present.
 extern bool isoSpiFault;
+
+/// @brief Indicates an LTC self-test fault is present.
 extern bool selfTestFault;
 
 // Global Peripherals ---------------------------------------------------------------------------------------------------------
@@ -47,19 +65,20 @@ extern mc24lc32_t hardwareEeprom;
 /// @brief Structure mapping the hardware EEPROM's contents to C datatypes.
 extern eepromMap_t* hardwareEepromMap;
 
-// TODO(Barach): Docs
+/// @brief The BMS's virtual memory map. This aggregates all non-volatile memory into a single map for CAN-bus access.
 extern virtualEeprom_t virtualEeprom;
 
-// TODO(Barach): Docs
+/// @brief The BMS's sense-board ICs. Indexed from negative-most potential LTC to positive-most potential LTC.
 extern ltc6811_t ltcs [LTC_COUNT];
 
-// TODO(Barach): Docs
+/// @brief The first LTC in the IsoSPI daisy-chain. Used as the operand in all LTC operations.
 extern ltc6811_t* ltcBottom;
 
-// TODO(Barach): Docs
+/// @brief The BMS's sense-board thermistors. Indexed from negative-most potential to positive-most potential, then by GPIO
+/// index.
 extern thermistorPulldown_t thermistors [LTC_COUNT][LTC6811_GPIO_COUNT];
 
-/// @brief The accumulator's pack current sensor.
+/// @brief The BMS's pack current sensor.
 extern dhabS124_t currentSensor;
 
 // Functions ------------------------------------------------------------------------------------------------------------------

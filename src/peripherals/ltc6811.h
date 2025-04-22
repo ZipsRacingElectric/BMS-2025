@@ -12,6 +12,7 @@
 //   https://github.com/analogdevicesinc/Linduino/tree/master.
 //
 // TODO(Barach): Combined GPIO and cell voltage command exists.
+// TODO(Barach): Mux self test.
 
 // Includes -------------------------------------------------------------------------------------------------------------------
 

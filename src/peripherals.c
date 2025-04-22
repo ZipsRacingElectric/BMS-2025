@@ -105,8 +105,8 @@ static const ltc6811Config_t DAISY_CHAIN_CONFIG =
 	},
 	.spiMiso				= LINE_SPI1_MISO,
 	.readAttemptCount		= 5,							// Fail after 5 invalid read attempts.
-	.cellAdcMode			= LTC6811_ADC_422HZ,			// TODO(Barach): Figure out 26 Hz. 26 Hz ADC sampling for cell voltages.
-	.gpioAdcMode			= LTC6811_ADC_422HZ,			// TODO(Barach): Figure out 26 Hz. 26 Hz ADC sampling for the thermistors.
+	.cellAdcMode			= LTC6811_ADC_422HZ,			// 422 Hz ADC sampling for cell voltages.
+	.gpioAdcMode			= LTC6811_ADC_422HZ,			// 422 Hz ADC sampling for the thermistors.
 	.openWireTestIterations	= 3,							// Perform 3 pull-up / pull-down commands before measuring.
 	.faultCount				= 6,							// Maximum of 6 continuous faults allowed. At a sampling rate of
 															// 2 Hz, this is 3 seconds.

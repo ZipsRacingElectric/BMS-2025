@@ -108,8 +108,8 @@ static const ltc6811Config_t DAISY_CHAIN_CONFIG =
 	.cellAdcMode			= LTC6811_ADC_422HZ,			// 422 Hz ADC sampling for cell voltages.
 	.gpioAdcMode			= LTC6811_ADC_422HZ,			// 422 Hz ADC sampling for the thermistors.
 	.openWireTestIterations	= 3,							// Perform 3 pull-up / pull-down commands before measuring.
-	.faultCount				= 6,							// Maximum of 6 continuous faults allowed. At a sampling rate of
-															// 2 Hz, this is 3 seconds.
+	.faultCount				= 8,							// Maximum of 8 continuous faults allowed. At a sampling rate of
+															// 4 Hz, this is 2 seconds.
 	.cellVoltageMax			= 4.16,							// Maximum voltage for the COSMX 95B0D0HD, any high exceeds a pack
 															// voltage of 600V and is therefore illegal.
 	.cellVoltageMin			= 3,							// Minimum voltage for the COSMX 95B0D0HD, any lower is below the

@@ -162,8 +162,8 @@ static uint16_t calculatePec (uint8_t* data, uint8_t dataCount);
 static bool validatePec (uint8_t* data, uint8_t dataCount, uint16_t pec);
 
 /**
- * @brief Wakes up all devices in an LTC6811 daisy-chain. This method guarantees all devices are in the ready or standby state,
- * regardless of the previous state of the daisy-chain.
+ * @brief Wakes up all devices in an LTC6811 daisy chain. This method guarantees all devices are in the ready or standby state,
+ * regardless of the previous state of the daisy chain.
  * @param bottom The bottom (first) device in the daisy chain.
  */
 static void wakeupSleep (ltc6811_t* bottom);
@@ -201,13 +201,6 @@ static bool writeRegisterGroups (ltc6811_t* bottom, uint16_t command);
  * check individual device states to determine validity.
  */
 static bool readRegisterGroups (ltc6811_t* bottom, uint16_t command);
-
-/**
- * @brief Writes the chain's configuration to each device's configuration register group.
- * @param bottom The bottom (first) device in the daisy chain.
- * @return False if a fatal error occurred, true otherwise. A non-fatal return code does not guarantee write success.
- */
-static bool configure (ltc6811_t* bottom);
 
 /**
  * @brief Samples the cell voltages of each device in a chain.
@@ -291,9 +284,13 @@ bool ltc6811Init (ltc6811_t* const* daisyChain, uint16_t deviceCount, const ltc6
 		// Start from the ready state.
 		daisyChain [index]->state = LTC6811_STATE_READY;
 
-		// Reset the cell faults.
 		for (uint16_t cell = 0; cell < LTC6811_CELL_COUNT; ++cell)
 		{
+			// Set all cells to default
+			daisyChain [index]->cellVoltages [cell] = 0.0f;
+			daisyChain [index]->cellsDischarging [cell] = false;
+
+			// Reset the cell faults.
 			daisyChain [index]->overvoltageCounters [cell] = 0;
 			daisyChain [index]->undervoltageCounters [cell] = 0;
 		}
@@ -307,10 +304,41 @@ bool ltc6811Init (ltc6811_t* const* daisyChain, uint16_t deviceCount, const ltc6
 			daisyChain [index]->gpioSensors [gpio] = config->gpioSensors [index][gpio];
 	}
 
-	if (!configure (daisyChain [0]))
+	if (!ltc6811WriteConfig (daisyChain [0]))
 		return false;
 
 	return ltc6811SampleCells (daisyChain [0]);
+}
+
+bool ltc6811WriteConfig (ltc6811_t* bottom)
+{
+	start (bottom);
+	wakeupSleep (bottom);
+
+	// Write the configuration register group A
+	for (ltc6811_t* device = bottom; device != NULL; device = device->upperDevice)
+	{
+		// GPIO set to high impedence, reference disabled outside conversion, ADC option 0.
+		device->tx [0] = CFGR0 (1, 1, 1, 1, 1, 0, 0);
+
+		// Undervoltage / overvoltage values.
+		device->tx [1] = CFGR1 (bottom->config->cellVoltageMin);
+		device->tx [2] = CFGR2 (bottom->config->cellVoltageMin, bottom->config->cellVoltageMax);
+		device->tx [3] = CFGR3 (bottom->config->cellVoltageMax);
+
+		// Cells to discharge and discharge timeout.
+		device->tx [4] = CFGR4 (device->cellsDischarging [7], device->cellsDischarging [6],
+			device->cellsDischarging [5], device->cellsDischarging [4], device->cellsDischarging [3],
+			device->cellsDischarging [2], device->cellsDischarging [1], device->cellsDischarging [0]);
+		device->tx [5] = CFGR5 (bottom->config->dischargeTimeout,
+			device->cellsDischarging [11], device->cellsDischarging [10],
+			device->cellsDischarging [9], device->cellsDischarging [8]);
+	}
+
+	bool result = writeRegisterGroups (bottom, COMMAND_WRCFGA);
+
+	stop (bottom);
+	return result;
 }
 
 bool ltc6811SampleCells (ltc6811_t* bottom)
@@ -488,7 +516,7 @@ bool ltc6811OpenWireTest (ltc6811_t* bottom)
 	for (uint8_t index = 0; index < bottom->config->openWireTestIterations; ++index)
 	{
 		// Send the pull-up command.
-		if (!writeCommand (bottom, COMMAND_ADOW (0b000, bottom->config->cellAdcMode, true, true)))
+		if (!writeCommand (bottom, COMMAND_ADOW (0b000, bottom->config->cellAdcMode, bottom->config->dischargeAllowed, true)))
 		{
 			stop (bottom);
 			return false;
@@ -513,7 +541,7 @@ bool ltc6811OpenWireTest (ltc6811_t* bottom)
 	for (uint8_t index = 0; index < bottom->config->openWireTestIterations; ++index)
 	{
 		// Send the pull-down command.
-		if (!writeCommand (bottom, COMMAND_ADOW (0b000, bottom->config->cellAdcMode, true, false)))
+		if (!writeCommand (bottom, COMMAND_ADOW (0b000, bottom->config->cellAdcMode, bottom->config->dischargeAllowed, false)))
 		{
 			stop (bottom);
 			return false;
@@ -816,39 +844,12 @@ bool readRegisterGroups (ltc6811_t* bottom, uint16_t command)
 	return true;
 }
 
-bool configure (ltc6811_t* bottom)
-{
-	start (bottom);
-	wakeupSleep (bottom);
-
-	// Write the configuration register group A
-	for (ltc6811_t* device = bottom; device != NULL; device = device->upperDevice)
-	{
-		// GPIO set to high impedence, reference disabled outside conversion, ADC option 0.
-		device->tx [0] = CFGR0 (1, 1, 1, 1, 1, 0, 0);
-
-		// Undervoltage / overvoltage values.
-		device->tx [1] = CFGR1 (bottom->config->cellVoltageMin);
-		device->tx [2] = CFGR2 (bottom->config->cellVoltageMin, bottom->config->cellVoltageMax);
-		device->tx [3] = CFGR3 (bottom->config->cellVoltageMax);
-
-		// No discharging or discharge timeout.
-		device->tx [4] = CFGR4 (0, 0, 0, 0, 0, 0, 0, 0);
-		device->tx [5] = CFGR5 (bottom->config->dischargeTimeout, 0, 0, 0, 0);
-	}
-
-	bool result = writeRegisterGroups (bottom, COMMAND_WRCFGA);
-
-	stop (bottom);
-	return result;
-}
-
 bool sampleCells (ltc6811_t* bottom, cellVoltageDestination_t destination)
 {
 	// See LTC6811 datasheet section "Measuring Cell Voltages (ADCV Command)", pg.25.
 
-	// Start the cell voltage conversion for all cells, permitting discharge.
-	if (!writeCommand (bottom, COMMAND_ADCV (bottom->config->cellAdcMode, true, 0b000)))
+	// Start the cell voltage conversion for all cells, conditionally permitting discharge.
+	if (!writeCommand (bottom, COMMAND_ADCV (bottom->config->cellAdcMode, bottom->config->dischargeAllowed, 0b000)))
 		return false;
 
 	if (!pollAdc (bottom, ADC_MODE_TIMEOUTS [bottom->config->cellAdcMode]))

@@ -35,6 +35,7 @@
 
 // Message IDs ----------------------------------------------------------------------------------------------------------------
 
+#define COMMAND_ID	0x3F4
 #define RESPONSE_ID 0x3E5
 
 // Function Prototypes --------------------------------------------------------------------------------------------------------
@@ -106,4 +107,25 @@ int8_t tcChargerReceiveHandler (void* node, CANRxFrame* frame)
 	}
 
 	return 0;
+}
+
+msg_t tcChargerSendCommand (tcCharger_t* charger, tcWorkingMode_t mode, float voltageLimit, float currentLimit,
+	sysinterval_t timeout)
+{
+	CANTxFrame transmit =
+	{
+		.DLC = 8,
+		.IDE = CAN_IDE_STD,
+		.SID = COMMAND_ID,
+		.data16 =
+		{
+			VOLTAGE_TO_WORD (voltageLimit),
+			CURRENT_TO_WORD (currentLimit),
+		}
+	};
+
+	transmit.data8 [5] = mode; // Working mode
+	transmit.data8 [6] = 0x00; // Operating mode is set to charging mode only, no heating.
+
+	return canTransmitTimeout (charger->driver, CAN_ANY_MAILBOX, &transmit, timeout);
 }

@@ -40,8 +40,7 @@ typedef enum
 	LTC6811_ADC_26HZ	= 0b11,
 } ltc6811AdcMode_t;
 
-/// @brief The maximum amount of time cells may be discharged without any update. TODO(Barach): There is no public way to
-/// update or balance yet.
+/// @brief The maximum amount of time a cell may be discharged without receiving an update.
 typedef enum
 {
 	LTC6811_DISCHARGE_TIMEOUT_DISABLED	= 0x0,
@@ -99,7 +98,10 @@ typedef struct
 	/// @brief The ADC conversion mode to use for measuring the GPIO voltages.
 	ltc6811AdcMode_t gpioAdcMode;
 
-	/// @brief TODO(Barach)
+	/// @brief Indicates whether or not dischaging cell should be permitted.
+	bool dischargeAllowed;
+
+	/// @brief The maximum amount of time a cell may be discharged without receiving an update.
 	ltc6811DischargeTimeout_t dischargeTimeout;
 
 	/// @brief The number of pull-up / pull-down command iterations to perform during the open wire test. This value should be
@@ -138,12 +140,15 @@ struct ltc6811
 	ltc6811State_t state;
 
 	// ADC measurements
-	float cellVoltageSum;
+	float cellVoltageSum; // TODO(Barach): This is incorrect.
 	float cellVoltages [LTC6811_CELL_COUNT];
 	float cellVoltagesPullup [LTC6811_CELL_COUNT];
 	float cellVoltagesPulldown [LTC6811_CELL_COUNT];
 	float cellVoltagesDelta [LTC6811_CELL_COUNT];
 	uint16_t vref2;
+
+	// Discharging
+	bool cellsDischarging [LTC6811_CELL_COUNT];
 
 	// Fault conditions
 	bool overvoltageFaults [LTC6811_CELL_COUNT];
@@ -173,7 +178,16 @@ typedef struct ltc6811 ltc6811_t;
 bool ltc6811Init (ltc6811_t* const* daisyChain, uint16_t deviceCount, const ltc6811Config_t* config);
 
 /**
- * @brief Samples the cell voltages of all devices in a daisy-chain.
+ * @brief Writes the configuration to each device in a daisy chain. The configuration includes @c cellVoltageMin ,
+ * @c cellVoltageMax , @c dischargeTimeout, and the @c cellsDischarging arrays.
+ * @param bottom The bottom (first) device in the stack.
+ * @return False if a fatal error occurred, true otherwise. A non-fatal return code does not mean all writes were successful,
+ * simply that they didn't all fail.
+ */
+bool ltc6811WriteConfig (ltc6811_t* bottom);
+
+/**
+ * @brief Samples the cell voltages of all devices in a daisy chain.
  * @param bottom The bottom (first) device in the stack.
  * @return False if a fatal error occurred, true otherwise. A non-fatal return code does not mean all measurements are valid,
  * check individual device states to determine so.
@@ -181,7 +195,7 @@ bool ltc6811Init (ltc6811_t* const* daisyChain, uint16_t deviceCount, const ltc6
 bool ltc6811SampleCells (ltc6811_t* bottom);
 
 /**
- * @brief Computers the sum of cell voltages for all devices in a daisy-chain.
+ * @brief Computers the sum of cell voltages for all devices in a daisy chain.
  * @note This can only be done after a call to @c ltc6811SampleCells
  * @param bottom The bottom (first) device in the stack.
  * @return False if a fatal error occurred, true otherwise. A non-fatal return code does not mean all measurements are valid,
@@ -190,7 +204,7 @@ bool ltc6811SampleCells (ltc6811_t* bottom);
 bool ltc6811SampleCellVoltageSum (ltc6811_t* bottom);
 
 /**
- * @brief Checks the undervoltage / overvoltage conditions of all devices in a daisy-chain.
+ * @brief Checks the undervoltage / overvoltage conditions of all devices in a daisy chain.
  * @note This can only be done after a call to @c ltc6811SampleCells
  * @param bottom The bottom (first) device in the stack.
  * @return False if a fatal error occurred, true otherwise. A non-fatal return code does not mean all measurements are valid,
@@ -199,7 +213,7 @@ bool ltc6811SampleCellVoltageSum (ltc6811_t* bottom);
 bool ltc6811SampleCellVoltageFaults (ltc6811_t* bottom);
 
 /**
- * @brief Samples the GPIO voltages of all devices in a daisy-chain.
+ * @brief Samples the GPIO voltages of all devices in a daisy chain.
  * @param bottom The bottom (first) device in the stack.
  * @return False if a fatal error occurred, true otherwise. A non-fatal return code does not mean all measurements are valid,
  * check individual sensor states to determine so.
@@ -207,23 +221,21 @@ bool ltc6811SampleCellVoltageFaults (ltc6811_t* bottom);
 bool ltc6811SampleGpio (ltc6811_t* bottom);
 
 /**
- * @brief Performs an open-wire test on all devices in a daisy-chain.
+ * @brief Performs an open-wire test on all devices in a daisy chain.
  * @param bottom The bottom (first) device in the stack.
  * @return False if a fatal error occurred, true otherwise. A non-fatal return code does not mean all measurements are valid,
  * check individual device states to determine so.
  */
 bool ltc6811OpenWireTest (ltc6811_t* bottom);
 
-/**
- * @brief Sets all devices in a daisy-chain to the ready state.
- * @param bottom The bottom (first) device in the stack.
- */
+/// @brief Sets all devices in a daisy chain to the ready state.
 static inline void ltc6811ClearState (ltc6811_t* bottom)
 {
 	for (ltc6811_t* device = bottom; device != NULL; device = device->upperDevice)
 		device->state = LTC6811_STATE_READY;
 }
 
+/// @brief Checks whether any device in a daisy chain has an undervoltage fault present.
 static inline bool ltc6811UndervoltageFault (ltc6811_t* bottom)
 {
 	bool fault = false;
@@ -233,6 +245,7 @@ static inline bool ltc6811UndervoltageFault (ltc6811_t* bottom)
 	return fault;
 }
 
+/// @brief Checks whether any device in a daisy chain has an overvoltage fault present.
 static inline bool ltc6811OvervoltageFault (ltc6811_t* bottom)
 {
 	bool fault = false;
@@ -242,6 +255,7 @@ static inline bool ltc6811OvervoltageFault (ltc6811_t* bottom)
 	return fault;
 }
 
+/// @brief Checks whether any device in a daisy chain has an open-wire fault present.
 static inline bool ltc6811OpenWireFault (ltc6811_t* bottom)
 {
 	bool fault = false;
@@ -251,6 +265,7 @@ static inline bool ltc6811OpenWireFault (ltc6811_t* bottom)
 	return fault;
 }
 
+/// @brief Checks whether any device in a daisy chain has an IsoSPI fault present.
 static inline bool ltc6811IsospiFault (ltc6811_t* bottom)
 {
 	bool fault = false;
@@ -259,6 +274,7 @@ static inline bool ltc6811IsospiFault (ltc6811_t* bottom)
 	return fault;
 }
 
+/// @brief Checks whether any device in a daisy chain has a self-test fault present.
 static inline bool ltc6811SelfTestFault (ltc6811_t* bottom)
 {
 	bool fault = false;

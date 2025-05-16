@@ -52,6 +52,8 @@ int main (void)
 	// // Start the watchdog timer.
 	// watchdogStart ();
 
+	// TODO(Barach): Move most of this logic into peripherals, or is that too far?
+
 	// If detect line is low, accumulator is on charger. Otherwise, accumulator is in vehicle.
 	if (palReadLine (LINE_CHARGER_DETECT))
 	{
@@ -106,6 +108,23 @@ int main (void)
 
 			// Sample the LTCs.
 			peripheralsSample ();
+
+			// Balance the cells
+			// TODO(Barach): Move to peripherals?
+			// TODO(Barach): Different thread or just different period?
+			// TODO(Barach): Conditional balancing (make config public variable)
+
+			float minVoltage = ltcs [0].cellVoltages [0];
+			for (uint16_t ltc = 0; ltc < LTC_COUNT; ++ltc)
+				for (uint16_t cell = 0; cell < LTC6811_CELL_COUNT; ++cell)
+					if (ltcs [ltc].cellVoltages [cell] < minVoltage)
+						minVoltage = ltcs [ltc].cellVoltages [cell];
+
+			for (uint16_t ltc = 0; ltc < LTC_COUNT; ++ltc)
+				for (uint16_t cell = 0; cell < LTC6811_CELL_COUNT; ++cell)
+					ltcs [ltc].cellsDischarging [cell] = ltcs [ltc].cellVoltages [cell] - minVoltage > 0.5f;
+
+			ltc6811WriteConfig (ltcBottom);
 
 			// If a fault is present, open the shutdown loop.
 			bool fltLine = !bmsFault;

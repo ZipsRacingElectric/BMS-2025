@@ -19,7 +19,7 @@
 
 // Constants ------------------------------------------------------------------------------------------------------------------
 
-/// @brief The number of LTC BMS ICs in the daisy-chain. Note this must be even.
+/// @brief The number of LTC BMS ICs in the daisy chain. Note this must be even.
 #define LTC_COUNT 2
 
 /// @brief The number of cells in the accumulator.
@@ -52,7 +52,7 @@ extern bool overtemperatureFault;
 extern bool senseLineFault;
 
 /// @brief Indicates an IsoSPI fault is present.
-extern bool isoSpiFault;
+extern bool isospiFault;
 
 /// @brief Indicates an LTC self-test fault is present.
 extern bool selfTestFault;
@@ -71,7 +71,7 @@ extern virtualEeprom_t virtualEeprom;
 /// @brief The BMS's sense-board ICs. Indexed from negative-most potential LTC to positive-most potential LTC.
 extern ltc6811_t ltcs [LTC_COUNT];
 
-/// @brief The first LTC in the IsoSPI daisy-chain. Used as the operand in all LTC operations.
+/// @brief The first LTC in the IsoSPI daisy chain. Used as the operand in all LTC operations.
 extern ltc6811_t* ltcBottom;
 
 /// @brief The BMS's sense-board thermistors. Indexed from negative-most potential to positive-most potential, then by GPIO

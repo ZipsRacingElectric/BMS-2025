@@ -13,7 +13,7 @@ bool overvoltageFault = true;
 bool undertemperatureFault = true;
 bool overtemperatureFault = true;
 bool senseLineFault = true;
-bool isoSpiFault = true;
+bool isospiFault = true;
 bool selfTestFault = true;
 
 // Global Peripherals ---------------------------------------------------------------------------------------------------------
@@ -92,29 +92,32 @@ static const ltc6811Config_t DAISY_CHAIN_CONFIG =
 	.spiDriver				= &SPID1,
 	.spiConfig 				=
 	{
-		.circular			= false,						// Linear buffer.
-		.slave				= false,						// Device is in master mode.
-		.cr1				= 0								// 2-line unidirectional, no CRC, MSB first, master mode, clock
-															// idles high, data capture on first clock transition.
-							| 0b110 << SPI_CR1_BR_Pos,		// Baudrate 656250 bps.
-		.cr2				= 0,							// Default CR2 config.
-		.data_cb			= NULL,							// No callbacks.
-		.error_cb			= NULL,							//
-		.ssport				= PAL_PORT (LINE_CS_ISOSPI),	// IsoSPI transceiver CS pin.
-		.sspad				= PAL_PAD (LINE_CS_ISOSPI)		//
+		.circular			= false,							// Linear buffer.
+		.slave				= false,							// Device is in master mode.
+		.cr1				= 0									// 2-line unidirectional, no CRC, MSB first, master mode, clock
+																// idles high, data capture on first clock transition.
+							| 0b110 << SPI_CR1_BR_Pos,			// Baudrate 656250 bps.
+		.cr2				= 0,								// Default CR2 config.
+		.data_cb			= NULL,								// No callbacks.
+		.error_cb			= NULL,								//
+		.ssport				= PAL_PORT (LINE_CS_ISOSPI),		// IsoSPI transceiver CS pin.
+		.sspad				= PAL_PAD (LINE_CS_ISOSPI)			//
 	},
-	.spiMiso				= LINE_SPI1_MISO,
-	.readAttemptCount		= 5,							// Fail after 5 invalid read attempts.
-	.cellAdcMode			= LTC6811_ADC_422HZ,			// 422 Hz ADC sampling for cell voltages.
-	.gpioAdcMode			= LTC6811_ADC_422HZ,			// 422 Hz ADC sampling for the thermistors.
-	.openWireTestIterations	= 3,							// Perform 3 pull-up / pull-down commands before measuring.
-	.faultCount				= 8,							// Maximum of 8 continuous faults allowed. At a sampling rate of
-															// 4 Hz, this is 2 seconds.
-	.cellVoltageMax			= 4.16,							// Maximum voltage for the COSMX 95B0D0HD, any high exceeds a pack
-															// voltage of 600V and is therefore illegal.
-	.cellVoltageMin			= 3,							// Minimum voltage for the COSMX 95B0D0HD, any lower is below the
-															// acceptable voltage range.
-	.gpioSensors =
+	.spiMiso				= LINE_SPI1_MISO,					// SPI peripheral MISO line.
+	.readAttemptCount		= 5,								// Fail after 5 invalid read attempts.
+	.cellAdcMode			= LTC6811_ADC_422HZ,				// 422 Hz ADC sampling for cell voltages.
+	.gpioAdcMode			= LTC6811_ADC_422HZ,				// 422 Hz ADC sampling for the thermistors.
+	.dischargeAllowed		= true,								// Allow cell discharging.
+	.dischargeTimeout		= LTC6811_DISCHARGE_TIMEOUT_30_S,	// Timeout cell discharging after 30s of no command.
+	.openWireTestIterations	= 3,								// Perform 3 pull-up / pull-down commands before measuring.
+	.faultCount				= 8,								// Maximum of 8 continuous faults allowed. At a sampling rate
+																// of 4 Hz, this is 2 seconds.
+	.cellVoltageMax			= 4.16,								// Maximum voltage for the COSMX 95B0D0HD, any higher exceeds a
+																// pack voltage of 600V and is therefore illegal.
+	.cellVoltageMin			= 3,								// Minimum voltage for the COSMX 95B0D0HD, any lower is below
+																// the acceptable voltage range.
+	.gpioSensors =												// Thermistor references. Note this must match the daisy chain
+																// ordering.
 	{
 		{
 			(analogSensor_t*) &thermistors [1][0],
@@ -203,7 +206,7 @@ static const ltc6811Config_t DAISY_CHAIN_CONFIG =
 	},
 };
 
-/// @brief The LTC IsoSPI daisy-chain, used to accomodate for changes to the IsoSPI wiring.
+/// @brief The LTC IsoSPI daisy chain, used to accomodate for changes to the IsoSPI wiring.
 static ltc6811_t* const DAISY_CHAIN [] =
 {
 	&ltcs [1],
@@ -284,22 +287,21 @@ void peripheralsSample (void)
 	undervoltageFault = ltc6811UndervoltageFault (ltcBottom);
 	overvoltageFault = ltc6811OvervoltageFault (ltcBottom);
 	senseLineFault = ltc6811OpenWireFault (ltcBottom);
-	isoSpiFault = ltc6811IsospiFault (ltcBottom);
+	isospiFault = ltc6811IsospiFault (ltcBottom);
 	selfTestFault = ltc6811SelfTestFault (ltcBottom);
 
-	// TODO(Barach): Re-implement
 	undertemperatureFault = false;
-	// for (uint16_t ltcIndex = 0; ltcIndex < LTC_COUNT; ++ltcIndex)
-	// 	for (uint16_t thermistorIndex = 0; thermistorIndex < LTC6811_GPIO_COUNT; ++thermistorIndex)
-	// 		undertemperatureFault |= thermistors [ltcIndex][thermistorIndex].undertemperatureFault;
+	for (uint16_t ltcIndex = 0; ltcIndex < LTC_COUNT; ++ltcIndex)
+		for (uint16_t thermistorIndex = 0; thermistorIndex < LTC6811_GPIO_COUNT; ++thermistorIndex)
+			undertemperatureFault |= thermistors [ltcIndex][thermistorIndex].undertemperatureFault;
 
 	overtemperatureFault = false;
 	for (uint16_t ltcIndex = 0; ltcIndex < LTC_COUNT; ++ltcIndex)
 		for (uint16_t thermistorIndex = 0; thermistorIndex < LTC6811_GPIO_COUNT; ++thermistorIndex)
 			overtemperatureFault |= thermistors [ltcIndex][thermistorIndex].overtemperatureFault;
 
-	bmsFault = undervoltageFault || overtemperatureFault || senseLineFault || isoSpiFault || senseLineFault ||
-		undertemperatureFault || overtemperatureFault;
+	bmsFault = undervoltageFault || overtemperatureFault || senseLineFault || isospiFault || senseLineFault ||
+		undertemperatureFault || overvoltageFault;
 
 	// Sample the current sensor
 	stmAdcSample (&adc);

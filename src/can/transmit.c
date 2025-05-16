@@ -81,7 +81,7 @@ msg_t transmitStatusMessage (CANDriver* driver, sysinterval_t timeout)
 			(undertemperatureFault << 2) |
 			(overtemperatureFault << 3) |
 			(senseLineFault << 4) |
-			(isoSpiFault << 5) |
+			(isospiFault << 5) |
 			(selfTestFault << 6)
 		}
 	};

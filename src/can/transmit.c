@@ -26,6 +26,7 @@
 #define TEMPERATURE_MESSAGE_BASE_ID			0x718
 #define SENSE_LINE_STATUS_BASE_ID			0x724
 #define POWER_MESSAGE_ID					0x728
+#define BALANCING_MESSAGE_BASE_ID			0x729
 
 // Functions ------------------------------------------------------------------------------------------------------------------
 
@@ -62,6 +63,14 @@ void transmitBmsMessages (sysinterval_t timeout)
 		timeCurrent = chVTGetSystemTimeX ();
 		timeout = chTimeDiffX (timeCurrent, timeDeadline);
 		transmitSenseLineStatusMessage (&CAND1, timeout, index);
+	}
+
+	// Cell balancing messages
+	for (uint16_t index = 0; index < BALANCING_MESSAGE_COUNT; ++index)
+	{
+		timeCurrent = chVTGetSystemTimeX ();
+		timeout = chTimeDiffX (timeCurrent, timeDeadline);
+		transmitBalancingMessage (&CAND1, timeout, index);
 	}
 
 	transmitPowerMessage (&CAND1, timeout);
@@ -217,6 +226,35 @@ msg_t transmitSenseLineStatusMessage (CANDriver* driver, sysinterval_t timeout, 
 	if (LTC_COUNT > ltcIndex + 3)
 		for (uint8_t bit = 0; bit < LTC6811_CELL_COUNT + 1; ++bit)
 			frame.data16 [3] |= ltcs [index + 3].openWireFaults [bit] << bit;
+
+	return canTransmitTimeout (driver, CAN_ANY_MAILBOX, &frame, timeout);
+}
+
+msg_t transmitBalancingMessage (CANDriver* driver, sysinterval_t timeout, uint16_t index)
+{
+	uint16_t ltcIndex = index * 4;
+
+	CANTxFrame frame =
+	{
+		.DLC	= 8,
+		.IDE	= CAN_IDE_STD,
+		.SID	= BALANCING_MESSAGE_BASE_ID + index,
+	};
+
+	for (uint8_t bit = 0; bit < LTC6811_CELL_COUNT; ++bit)
+		frame.data16 [0] |= ltcs [index].cellsDischarging [bit] << bit;
+
+	if (LTC_COUNT > ltcIndex + 1)
+		for (uint8_t bit = 0; bit < LTC6811_CELL_COUNT; ++bit)
+			frame.data16 [1] |= ltcs [index + 1].cellsDischarging [bit] << bit;
+
+	if (LTC_COUNT > ltcIndex + 2)
+		for (uint8_t bit = 0; bit < LTC6811_CELL_COUNT; ++bit)
+			frame.data16 [2] |= ltcs [index + 2].cellsDischarging [bit] << bit;
+
+	if (LTC_COUNT > ltcIndex + 3)
+		for (uint8_t bit = 0; bit < LTC6811_CELL_COUNT; ++bit)
+			frame.data16 [3] |= ltcs [index + 3].cellsDischarging [bit] << bit;
 
 	return canTransmitTimeout (driver, CAN_ANY_MAILBOX, &frame, timeout);
 }

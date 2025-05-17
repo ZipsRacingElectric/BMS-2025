@@ -25,6 +25,9 @@
 /// @brief The number of cells in the accumulator.
 #define CELL_COUNT (LTC_COUNT * LTC6811_CELL_COUNT)
 
+/// @brief The number of sense lines in the accumulator.
+#define WIRE_COUNT (LTC_COUNT * (LTC6811_CELL_COUNT + 1))
+
 /// @brief The number of temperature sensors in the accumulator.
 #define TEMP_COUNT (LTC_COUNT * LTC6811_GPIO_COUNT)
 

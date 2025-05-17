@@ -17,7 +17,8 @@
 
 #define VOLTAGE_MESSAGE_COUNT ((CELL_COUNT + 5) / 6)
 #define TEMPERATURE_MESSAGE_COUNT ((TEMP_COUNT + 4) / 5)
-#define SENSE_LINE_STATUS_MESSAGE_COUNT ((CELL_COUNT + 47) / 48)
+#define SENSE_LINE_STATUS_MESSAGE_COUNT ((WIRE_COUNT + 51) / 52)
+#define BALANCING_MESSAGE_COUNT ((CELL_COUNT + 47) / 48)
 
 // Functions ------------------------------------------------------------------------------------------------------------------
 
@@ -69,5 +70,14 @@ msg_t transmitTemperatureMessage (CANDriver* driver, sysinterval_t timeout, uint
  * @return The result of the CAN operation.
  */
 msg_t transmitSenseLineStatusMessage (CANDriver* driver, sysinterval_t timeout, uint16_t index);
+
+/**
+ * @brief Transmits a cell balancing message
+ * @param driver The CAN driver to use.
+ * @param timeout The interval to timeout after.
+ * @param index The index of the message to send.
+ * @return The result of the CAN operation.
+ */
+msg_t transmitBalancingMessage (CANDriver* driver, sysinterval_t timeout, uint16_t index);
 
 #endif // TRANSMIT_H

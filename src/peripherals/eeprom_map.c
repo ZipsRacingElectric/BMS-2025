@@ -54,14 +54,43 @@ bool eepromWriteonlyWrite (void* object, uint16_t addr, const void* data, uint16
 {
 	(void) object;
 
-	// TODO(Barach): Nothing uses data yet.
-	(void) data;
-	(void) dataCount;
+	uint8_t ltcIndex;
+	uint8_t cellIndex;
 
 	switch (addr)
 	{
-	case 0x0000:
+	case 0x0000: // Watchdog trigger command.
 		watchdogTrigger ();
+		return true;
+
+	case 0x0001: // Cell balancing enable / disable command.
+		return true;
+
+	case 0x0002: // Cell discharge disable command.
+		if (dataCount != 1)
+			return false;
+
+		ltcIndex = *((uint8_t*) data) / LTC6811_CELL_COUNT;
+		cellIndex = *((uint8_t*) data) % LTC6811_CELL_COUNT;
+		if (ltcIndex > LTC_COUNT)
+			return false;
+
+		ltcs [ltcIndex].cellsDischarging [cellIndex] = false;
+		ltc6811WriteConfig (ltcBottom);
+		return true;
+
+	case 0x0003: // Cell discharge enable command.
+		if (dataCount != 1)
+			return false;
+
+		ltcIndex = *((uint8_t*) data) / LTC6811_CELL_COUNT;
+		cellIndex = *((uint8_t*) data) % LTC6811_CELL_COUNT;
+		if (ltcIndex > LTC_COUNT)
+			return false;
+
+		ltcs [ltcIndex].cellsDischarging [cellIndex] = true;
+		ltc6811WriteConfig (ltcBottom);
+		return true;
 	}
 
 	return false;

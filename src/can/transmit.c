@@ -9,7 +9,8 @@
 
 // Temperature Values (C)
 #define TEMPERATURE_INVERSE_FACTOR			(4096.0f / 256.0f)
-#define TEMPERATURE_TO_WORD(temperature)	(uint16_t) ((temperature) * TEMPERATURE_INVERSE_FACTOR)
+#define TEMPERATURE_OFFSET					-106.0f
+#define TEMPERATURE_TO_WORD(temperature)	(uint16_t) ((temperature - TEMPERATURE_OFFSET) * TEMPERATURE_INVERSE_FACTOR)
 
 // Pack Voltage (V)
 #define PACK_VOLTAGE_INVERSE_FACTOR			(65536.0f / 819.2f)
@@ -163,19 +164,12 @@ msg_t transmitTemperatureMessage (CANDriver* driver, sysinterval_t timeout, uint
 {
 	uint16_t temperatures [5];
 
-	// TODO(Barach): Re-enable temperatures
-	// for (uint8_t tempIndex = 0; tempIndex < 5; ++tempIndex)
-	// 	temperatures [tempIndex] = TEMPERATURE_TO_WORD (thermistors [index][tempIndex].temperature);
-
 	bool undertemperature = false;
 	bool overtemperature = false;
+
 	for (uint8_t tempIndex = 0; tempIndex < 5; ++tempIndex)
 	{
-		if (thermistors [index][tempIndex].resistance < 16380.0f)
-			temperatures [tempIndex] = thermistors [index][tempIndex].resistance / 4.0f;
-		else
-			temperatures [tempIndex] = 4095;
-
+		temperatures [tempIndex] = TEMPERATURE_TO_WORD (thermistors [index][tempIndex].temperature);
 		undertemperature |= thermistors [index][tempIndex].undertemperatureFault;
 		overtemperature |= thermistors [index][tempIndex].overtemperatureFault;
 	}

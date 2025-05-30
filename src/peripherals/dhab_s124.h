@@ -62,6 +62,9 @@ typedef struct
 	/// @brief The current at which channel 1 saturates (positive and negative). This determines whether channel 1 or channel
 	/// 2 should be used.
 	float channel1SaturationCurrent;
+
+	/// @brief The magnitude of current below which to clamp to the output 0A.
+	float deadzoneCurrent;
 } dhabS124Config_t;
 
 struct dhabS124

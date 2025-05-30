@@ -92,4 +92,8 @@ static void update (dhabS124_t* sensor)
 		sensor->value = sensor->channel2.value;
 	else
 		sensor->value = sensor->channel1.value;
+
+	// Clamp any readings within the deadzone.
+	if (sensor->value < sensor->config->deadzoneCurrent && sensor->value > -sensor->config->deadzoneCurrent)
+		sensor->value = 0.0f;
 }

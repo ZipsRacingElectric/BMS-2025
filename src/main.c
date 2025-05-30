@@ -4,6 +4,14 @@
 // Date Created: 2024.11.05
 //
 // Description: Entrypoint and interrupt handlers for the vehicle's battery management system.
+//
+// TODO(Barach):
+// - Fix sum of cells measurement
+// - Introduce sense-board object for abstracting thermistor and LTC mapping.
+// - Replace LTC init with sequence of 'append' functions to remove unnecessary arrays.
+// - Have sense-board take over fault tolerance of LTCs
+// - Have LTCs dump cell values into user-provided array so single array can be used.
+// - Fix ADC polling
 
 // Includes -------------------------------------------------------------------------------------------------------------------
 
@@ -32,6 +40,10 @@ void hardFaultCallback (void)
 
 // Entrypoint -----------------------------------------------------------------------------------------------------------------
 
+void vehicleEntrypoint (void);
+
+void chargerEntrypoint (void);
+
 int main (void)
 {
 	// ChibiOS Initialization
@@ -58,62 +70,79 @@ int main (void)
 	if (palReadLine (LINE_CHARGER_DETECT))
 	{
 		// Vehicle mode
-
-		// Initialize the CAN interface.
-		if (!canVehicleInit (NORMALPRIO))
-		{
-			hardFaultCallback ();
-			while (true);
-		}
-
-		// Main loop
-		systime_t timePrevious = chVTGetSystemTimeX ();
-		while (true)
-		{
-			// // Reset the watchdog.
-			// watchdogReset ();
-
-			// Sample the LTCs.
-			peripheralsSample ();
-
-			// If a fault is present, open the shutdown loop.
-			bool fltLine = !bmsFault;
-			palWriteLine (LINE_BMS_FLT, fltLine);
-
-			// Transmit the CAN messages.
-			transmitBmsMessages (BMS_THREAD_PERIOD);
-
-			// Sleep until the next loop
-			chThdSleepUntilWindowed (timePrevious, chTimeAddX (timePrevious, BMS_THREAD_PERIOD));
-			timePrevious = chVTGetSystemTimeX ();
-		}
+		vehicleEntrypoint ();
 	}
 	else
 	{
 		// Charger mode
+		chargerEntrypoint ();
+	}
+}
 
-		// Initialize the CAN interface.
-		if (!canChargerInit (NORMALPRIO))
+void vehicleEntrypoint (void)
+{
+	// Initialize the CAN interface.
+	if (!canVehicleInit (NORMALPRIO))
+	{
+		hardFaultCallback ();
+		while (true);
+	}
+
+	// Main loop
+	systime_t timePrevious = chVTGetSystemTimeX ();
+	while (true)
+	{
+		// // Reset the watchdog.
+		// watchdogReset ();
+
+		// Sample the LTCs.
+		peripheralsSample ();
+
+		// If a fault is present, open the shutdown loop.
+		bool fltLine = !bmsFault;
+		palWriteLine (LINE_BMS_FLT, fltLine);
+
+		// Transmit the CAN messages.
+		transmitBmsMessages (BMS_THREAD_PERIOD);
+
+		// Sleep until the next loop
+		chThdSleepUntilWindowed (timePrevious, chTimeAddX (timePrevious, BMS_THREAD_PERIOD));
+		timePrevious = chVTGetSystemTimeX ();
+	}
+}
+
+void chargerEntrypoint ()
+{
+	// Initialize the CAN interface.
+	if (!canChargerInit (NORMALPRIO))
+	{
+		hardFaultCallback ();
+		while (true);
+	}
+
+	bool started = false;
+
+	// Main loop
+	systime_t timePrevious = chVTGetSystemTimeX ();
+	while (true)
+	{
+		// // Reset the watchdog.
+		// watchdogReset ();
+
+		// Sample the LTCs.
+		peripheralsSample ();
+
+		// Balance the cells
+		// TODO(Barach): Move to peripherals?
+		// TODO(Barach): Different thread or just different period?
+		// TODO(Barach): Conditional balancing (make config public variable)
+
+		// If a fault is present, open the shutdown loop.
+		bool fltLine = !bmsFault;
+		palWriteLine (LINE_BMS_FLT, fltLine);
+
+		if (!bmsFault)
 		{
-			hardFaultCallback ();
-			while (true);
-		}
-
-		// Main loop
-		systime_t timePrevious = chVTGetSystemTimeX ();
-		while (true)
-		{
-			// // Reset the watchdog.
-			// watchdogReset ();
-
-			// Sample the LTCs.
-			peripheralsSample ();
-
-			// Balance the cells
-			// TODO(Barach): Move to peripherals?
-			// TODO(Barach): Different thread or just different period?
-			// TODO(Barach): Conditional balancing (make config public variable)
-
 			float minVoltage = ltcs [0].cellVoltages [0];
 			for (uint16_t ltc = 0; ltc < LTC_COUNT; ++ltc)
 				for (uint16_t cell = 0; cell < LTC6811_CELL_COUNT; ++cell)
@@ -123,19 +152,27 @@ int main (void)
 			for (uint16_t ltc = 0; ltc < LTC_COUNT; ++ltc)
 				for (uint16_t cell = 0; cell < LTC6811_CELL_COUNT; ++cell)
 					ltcs [ltc].cellsDischarging [cell] = ltcs [ltc].cellVoltages [cell] - minVoltage > 0.5f;
-
-			ltc6811WriteConfig (ltcBottom);
-
-			// If a fault is present, open the shutdown loop.
-			bool fltLine = !bmsFault;
-			palWriteLine (LINE_BMS_FLT, fltLine);
-
-			// Transmit the CAN messages.
-			transmitBmsMessages (BMS_THREAD_PERIOD);
-
-			// Sleep until the next loop
-			chThdSleepUntilWindowed (timePrevious, chTimeAddX (timePrevious, BMS_THREAD_PERIOD));
-			timePrevious = chVTGetSystemTimeX ();
 		}
+		else
+		{
+			for (uint16_t ltc = 0; ltc < LTC_COUNT; ++ltc)
+				for (uint16_t cell = 0; cell < LTC6811_CELL_COUNT; ++cell)
+					ltcs [ltc].cellsDischarging [cell] = false;
+		}
+
+		ltc6811WriteConfig (ltcBottom);
+
+		// if (!started)
+		// 	tcChargerSendCommand (&charger, TC_WORKING_MODE_STARTUP, 100, 0.1, TIME_MS2I (100));
+		// else
+		// 	tcChargerSendCommand (&charger, TC_WORKING_MODE_CLOSING, 100, 0.1, TIME_MS2I (100));
+		// started = true;
+
+		// Transmit the CAN messages.
+		transmitBmsMessages (BMS_THREAD_PERIOD);
+
+		// Sleep until the next loop
+		chThdSleepUntilWindowed (timePrevious, chTimeAddX (timePrevious, BMS_THREAD_PERIOD));
+		timePrevious = chVTGetSystemTimeX ();
 	}
 }

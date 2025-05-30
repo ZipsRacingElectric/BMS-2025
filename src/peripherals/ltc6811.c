@@ -284,6 +284,8 @@ bool ltc6811Init (ltc6811_t* const* daisyChain, uint16_t deviceCount, const ltc6
 		// Start from the ready state.
 		daisyChain [index]->state = LTC6811_STATE_READY;
 
+		daisyChain [index]->dischargeAllowed = config->dischargeAllowed;
+
 		for (uint16_t cell = 0; cell < LTC6811_CELL_COUNT; ++cell)
 		{
 			// Set all cells to default
@@ -359,22 +361,30 @@ bool ltc6811SampleCells (ltc6811_t* bottom)
 
 bool ltc6811SampleCellVoltageSum (ltc6811_t* bottom)
 {
-	start (bottom);
-	wakeupSleep (bottom);
-
-	// Read the status register group A.
-	if (!readRegisterGroups (bottom, COMMAND_RDSTATA))
+	// TODO(Barach): This should actually sample
+	for (ltc6811_t* device = bottom; device != NULL; device = device->upperDevice)
 	{
-		stop (bottom);
-		return false;
+		device->cellVoltageSum = 0.0f;
+		for (uint16_t index = 0; index < LTC6811_CELL_COUNT; ++index)
+			device->cellVoltageSum += device->cellVoltages [index];
 	}
 
-	// Read the sum of cell voltages.
-	for (ltc6811_t* device = bottom; device != NULL; device = device->upperDevice)
-		device->cellVoltageSum = STAR0_1_SC (device->rx [0], device->rx [1]);
+	// start (bottom);
+	// wakeupSleep (bottom);
 
-	stop (bottom);
-	return true;
+	// // Read the status register group A.
+	// if (!readRegisterGroups (bottom, COMMAND_RDSTATA))
+	// {
+	// 	stop (bottom);
+	// 	return false;
+	// }
+
+	// // Read the sum of cell voltages.
+	// for (ltc6811_t* device = bottom; device != NULL; device = device->upperDevice)
+	// 	device->cellVoltageSum = STAR0_1_SC (device->rx [0], device->rx [1]);
+
+	// stop (bottom);
+	// return true;
 }
 
 bool ltc6811SampleCellVoltageFaults (ltc6811_t* bottom)
@@ -516,7 +526,7 @@ bool ltc6811OpenWireTest (ltc6811_t* bottom)
 	for (uint8_t index = 0; index < bottom->config->openWireTestIterations; ++index)
 	{
 		// Send the pull-up command.
-		if (!writeCommand (bottom, COMMAND_ADOW (0b000, bottom->config->cellAdcMode, bottom->config->dischargeAllowed, true)))
+		if (!writeCommand (bottom, COMMAND_ADOW (0b000, bottom->config->cellAdcMode, bottom->dischargeAllowed, true)))
 		{
 			stop (bottom);
 			return false;
@@ -541,7 +551,7 @@ bool ltc6811OpenWireTest (ltc6811_t* bottom)
 	for (uint8_t index = 0; index < bottom->config->openWireTestIterations; ++index)
 	{
 		// Send the pull-down command.
-		if (!writeCommand (bottom, COMMAND_ADOW (0b000, bottom->config->cellAdcMode, bottom->config->dischargeAllowed, false)))
+		if (!writeCommand (bottom, COMMAND_ADOW (0b000, bottom->config->cellAdcMode, bottom->dischargeAllowed, false)))
 		{
 			stop (bottom);
 			return false;
@@ -849,7 +859,7 @@ bool sampleCells (ltc6811_t* bottom, cellVoltageDestination_t destination)
 	// See LTC6811 datasheet section "Measuring Cell Voltages (ADCV Command)", pg.25.
 
 	// Start the cell voltage conversion for all cells, conditionally permitting discharge.
-	if (!writeCommand (bottom, COMMAND_ADCV (bottom->config->cellAdcMode, bottom->config->dischargeAllowed, 0b000)))
+	if (!writeCommand (bottom, COMMAND_ADCV (bottom->config->cellAdcMode, bottom->dischargeAllowed, 0b000)))
 		return false;
 
 	if (!pollAdc (bottom, ADC_MODE_TIMEOUTS [bottom->config->cellAdcMode]))

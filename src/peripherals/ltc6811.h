@@ -132,6 +132,7 @@ struct ltc6811
 
 	// Daisy chain configuration
 	const ltc6811Config_t* config;
+	bool dischargeAllowed;
 
 	// Per-device configuration
 	analogSensor_t* gpioSensors [LTC6811_GPIO_COUNT];
@@ -140,7 +141,7 @@ struct ltc6811
 	ltc6811State_t state;
 
 	// ADC measurements
-	float cellVoltageSum; // TODO(Barach): This is incorrect.
+	float cellVoltageSum;
 	float cellVoltages [LTC6811_CELL_COUNT];
 	float cellVoltagesPullup [LTC6811_CELL_COUNT];
 	float cellVoltagesPulldown [LTC6811_CELL_COUNT];

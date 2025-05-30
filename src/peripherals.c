@@ -107,7 +107,7 @@ static const ltc6811Config_t DAISY_CHAIN_CONFIG =
 	.readAttemptCount		= 5,								// Fail after 5 invalid read attempts.
 	.cellAdcMode			= LTC6811_ADC_422HZ,				// 422 Hz ADC sampling for cell voltages.
 	.gpioAdcMode			= LTC6811_ADC_422HZ,				// 422 Hz ADC sampling for the thermistors.
-	.dischargeAllowed		= true,								// Allow cell discharging.
+	.dischargeAllowed		= false,							// Allow cell discharging.
 	.dischargeTimeout		= LTC6811_DISCHARGE_TIMEOUT_30_S,	// Timeout cell discharging after 30s of no command.
 	.openWireTestIterations	= 3,								// Perform 3 pull-up / pull-down commands before measuring.
 	.faultCount				= 8,								// Maximum of 8 continuous faults allowed. At a sampling rate
@@ -286,10 +286,12 @@ void peripheralsSample (void)
 
 	undervoltageFault = ltc6811UndervoltageFault (ltcBottom);
 	overvoltageFault = ltc6811OvervoltageFault (ltcBottom);
-	senseLineFault = ltc6811OpenWireFault (ltcBottom);
 	isospiFault = ltc6811IsospiFault (ltcBottom);
 	selfTestFault = ltc6811SelfTestFault (ltcBottom);
 
+	// TODO(Barach): Open-wire test doesn't work with discharging.
+	senseLineFault = ltc6811OpenWireTest (ltcBottom);
+	
 	undertemperatureFault = false;
 	for (uint16_t ltcIndex = 0; ltcIndex < LTC_COUNT; ++ltcIndex)
 		for (uint16_t thermistorIndex = 0; thermistorIndex < LTC6811_GPIO_COUNT; ++thermistorIndex)

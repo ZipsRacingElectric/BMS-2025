@@ -6,14 +6,14 @@
 // Voltage
 #define VOLTAGE_FACTOR			0.1f
 #define VOLTAGE_INVERSE_FACTOR	10.0f
-#define WORD_TO_VOLTAGE(word)	((word) * VOLTAGE_FACTOR)
-#define VOLTAGE_TO_WORD(volt)	((uint16_t) ((volt) * VOLTAGE_INVERSE_FACTOR))
+#define WORD_TO_VOLTAGE(word)	(__REV16 (word) * VOLTAGE_FACTOR)
+#define VOLTAGE_TO_WORD(volt)	__REV16 ((uint16_t) ((volt) * VOLTAGE_INVERSE_FACTOR))
 
 // Current
 #define CURRENT_FACTOR			0.1f
 #define CURRENT_INVERSE_FACTOR	10.0f
-#define WORD_TO_CURRENT(word)	((word) * CURRENT_FACTOR)
-#define CURRENT_TO_WORD(curr)	((uint16_t) ((curr) * CURRENT_INVERSE_FACTOR))
+#define WORD_TO_CURRENT(word)	(__REV16 (word) * CURRENT_FACTOR)
+#define CURRENT_TO_WORD(curr)	__REV16 ((uint16_t) ((curr) * CURRENT_INVERSE_FACTOR))
 
 // Status Word
 #define STATUS_WORD_TO_HARDWARE_PROTECTION(word)		(((word) & 0b000000000000000000000001) == 0b000000000000000000000001)
@@ -35,8 +35,8 @@
 
 // Message IDs ----------------------------------------------------------------------------------------------------------------
 
-#define COMMAND_ID	0x3F4
-#define RESPONSE_ID 0x3E5
+#define COMMAND_ID	0x1806E5F4
+#define RESPONSE_ID 0x18FF50E5
 
 // Function Prototypes --------------------------------------------------------------------------------------------------------
 
@@ -61,7 +61,7 @@ void tcChargerInit (tcCharger_t* charger, const tcChargerConfig_t* config)
 int8_t tcChargerReceiveHandler (void* node, CANRxFrame* frame)
 {
 	// Charger only has 1 message.
-	if (frame->SID != RESPONSE_ID)
+	if (frame->EID != RESPONSE_ID)
 		return -1;
 
 	tcCharger_t* charger = (tcCharger_t*) node;
@@ -115,8 +115,8 @@ msg_t tcChargerSendCommand (tcCharger_t* charger, tcWorkingMode_t mode, float vo
 	CANTxFrame transmit =
 	{
 		.DLC = 8,
-		.IDE = CAN_IDE_STD,
-		.SID = COMMAND_ID,
+		.IDE = CAN_IDE_EXT,
+		.EID = COMMAND_ID,
 		.data16 =
 		{
 			VOLTAGE_TO_WORD (voltageLimit),

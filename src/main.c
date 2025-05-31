@@ -94,8 +94,9 @@ int main (void)
 		{
 			chMtxLock (&peripheralMutex);
 
+			// TODO(Barach): Change to prechargeComplete
 			balancing = hardwareEepromMap->balancingEnabled;
-			if (palReadLine (LINE_SHUTDOWN_STATUS) && !bmsFault && balancing)
+			if (shutdownLoopClosed && !bmsFault && balancing)
 			{
 				// TODO(Barach): Proper fault handling
 				float minVoltage = ltcs [0].cellVoltages [0];
@@ -116,8 +117,9 @@ int main (void)
 						ltcs [ltc].cellsDischarging [cell] = false;
 			}
 
+			// TODO(Barach): Change to prechargeComplete
 			charging = hardwareEepromMap->chargingEnabled;
-			if (palReadLine (LINE_SHUTDOWN_STATUS) && !bmsFault && charging)
+			if (shutdownLoopClosed && !bmsFault && charging)
 			{
 				// Calculate the maximum requestable current, based on the power limit.
 				float currentLimit = hardwareEepromMap->chargingPowerLimit / packVoltage;

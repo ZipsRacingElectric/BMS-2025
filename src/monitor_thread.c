@@ -60,6 +60,9 @@ void monitorThread (void* arg)
 		bmsFault = undervoltageFault || overvoltageFault || isospiFault || senseLineFault || selfTestFault
 			|| undertemperatureFault || overtemperatureFault;
 
+		shutdownLoopClosed = !palReadLine (LINE_SHUTDOWN_STATUS);
+		prechargeComplete = !palReadLine (LINE_PRECHARGE_STATUS);
+
 		// Sample the current sensor
 		stmAdcSample (&adc);
 

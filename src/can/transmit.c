@@ -94,7 +94,9 @@ msg_t transmitStatusMessage (CANDriver* driver, sysinterval_t timeout)
 			(isospiFault << 5) |
 			(selfTestFault << 6) |
 			(charging << 7),
-			balancing
+			balancing |
+			(shutdownLoopClosed << 1) |
+			(prechargeComplete << 2)
 		}
 	};
 

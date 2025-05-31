@@ -67,6 +67,12 @@ extern bool charging;
 /// @brief Indicates the BMS is balancing cell voltages.
 extern bool balancing;
 
+/// @brief Indicates the shutdown loop is closed (up to precharge circuit).
+extern bool shutdownLoopClosed;
+
+/// @brief Indicates the shutdown loop is closed and precharge is complete.
+extern bool prechargeComplete;
+
 // Global Peripherals ---------------------------------------------------------------------------------------------------------
 
 /// @brief Mutex guarding access to the global peripherals.

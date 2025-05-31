@@ -17,6 +17,8 @@ bool isospiFault = true;
 bool selfTestFault = true;
 bool charging = false;
 bool balancing = false;
+bool shutdownLoopClosed = false;
+bool prechargeComplete = false;
 
 // Global Peripherals ---------------------------------------------------------------------------------------------------------
 
@@ -110,7 +112,7 @@ static const ltc6811Config_t DAISY_CHAIN_CONFIG =
 	.readAttemptCount		= 5,								// Fail after 5 invalid read attempts.
 	.cellAdcMode			= LTC6811_ADC_422HZ,				// 422 Hz ADC sampling for cell voltages.
 	.gpioAdcMode			= LTC6811_ADC_422HZ,				// 422 Hz ADC sampling for the thermistors.
-	.dischargeAllowed		= false,							// Allow cell discharging.
+	.dischargeAllowed		= true,								// Allow cell discharging.
 	.dischargeTimeout		= LTC6811_DISCHARGE_TIMEOUT_30_S,	// Timeout cell discharging after 30s of no command.
 	.openWireTestIterations	= 3,								// Perform 3 pull-up / pull-down commands before measuring.
 	.faultCount				= 8,								// Maximum of 8 continuous faults allowed. At a sampling rate

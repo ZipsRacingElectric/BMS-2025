@@ -112,6 +112,12 @@ int8_t tcChargerReceiveHandler (void* node, CANRxFrame* frame)
 msg_t tcChargerSendCommand (tcCharger_t* charger, tcWorkingMode_t mode, float voltageLimit, float currentLimit,
 	sysinterval_t timeout)
 {
+	if (voltageLimit > TC_CHARGER_VOLTAGE_LIMIT_MAX)
+		voltageLimit = 0;
+
+	if (currentLimit > TC_CHARGER_CURRENT_LIMIT_MAX)
+		currentLimit = 0;
+
 	CANTxFrame transmit =
 	{
 		.DLC = 8,

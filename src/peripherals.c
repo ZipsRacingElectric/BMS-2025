@@ -19,6 +19,8 @@ bool selfTestFault = true;
 // Global Peripherals ---------------------------------------------------------------------------------------------------------
 
 // Public
+mutex_t					peripheralMutex;
+stmAdc_t				adc;
 mc24lc32_t				hardwareEeprom;
 eepromMap_t*			hardwareEepromMap;
 virtualEeprom_t			virtualEeprom;
@@ -28,7 +30,6 @@ thermistorPulldown_t	thermistors [LTC_COUNT][LTC6811_GPIO_COUNT];
 dhabS124_t				currentSensor;
 
 // Private
-stmAdc_t				adc;
 eeprom_t				readonlyWriteonlyEeprom;
 
 // Configuration --------------------------------------------------------------------------------------------------------------
@@ -227,6 +228,8 @@ static ltc6811_t* const DAISY_CHAIN [] =
 
 bool peripheralsInit (void)
 {
+	chMtxObjectInit (&peripheralMutex);
+
 	// ADC 1 initialization
 	if (!stmAdcInit (&adc, &ADC_CONFIG))
 		return false;
@@ -259,6 +262,8 @@ bool peripheralsInit (void)
 
 void peripheralsReconfigure (void)
 {
+	chMtxLock (&peripheralMutex);
+
 	// Thermistor initialization
 	for (uint16_t deviceIndex = 0; deviceIndex < LTC_COUNT; ++deviceIndex)
 		for (uint16_t gpioIndex = 0; gpioIndex < LTC6811_GPIO_COUNT; ++gpioIndex)
@@ -266,45 +271,6 @@ void peripheralsReconfigure (void)
 
 	// Current sensor initialization
 	dhabS124Init (&currentSensor, &hardwareEepromMap->currentSensorConfig);
-}
 
-void peripheralsSample (void)
-{
-	// Sample the LTCs
-	ltc6811ClearState (ltcBottom);
-	ltc6811SampleCells (ltcBottom);
-	ltc6811SampleCellVoltageSum (ltcBottom);
-	ltc6811SampleCellVoltageFaults (ltcBottom);
-	ltc6811SampleGpio (ltcBottom);
-	ltc6811OpenWireTest (ltcBottom);
-
-	// Update the global state
-
-	packVoltage = 0.0f;
-	for (uint16_t index = 0; index < LTC_COUNT; ++index)
-		packVoltage += ltcs [index].cellVoltageSum;
-
-	undervoltageFault = ltc6811UndervoltageFault (ltcBottom);
-	overvoltageFault = ltc6811OvervoltageFault (ltcBottom);
-	isospiFault = ltc6811IsospiFault (ltcBottom);
-	selfTestFault = ltc6811SelfTestFault (ltcBottom);
-
-	// TODO(Barach): Open-wire test doesn't work with discharging.
-	senseLineFault = ltc6811OpenWireTest (ltcBottom);
-	
-	undertemperatureFault = false;
-	for (uint16_t ltcIndex = 0; ltcIndex < LTC_COUNT; ++ltcIndex)
-		for (uint16_t thermistorIndex = 0; thermistorIndex < LTC6811_GPIO_COUNT; ++thermistorIndex)
-			undertemperatureFault |= thermistors [ltcIndex][thermistorIndex].undertemperatureFault;
-
-	overtemperatureFault = false;
-	for (uint16_t ltcIndex = 0; ltcIndex < LTC_COUNT; ++ltcIndex)
-		for (uint16_t thermistorIndex = 0; thermistorIndex < LTC6811_GPIO_COUNT; ++thermistorIndex)
-			overtemperatureFault |= thermistors [ltcIndex][thermistorIndex].overtemperatureFault;
-
-	bmsFault = undervoltageFault || overtemperatureFault || senseLineFault || isospiFault || senseLineFault ||
-		undertemperatureFault || overvoltageFault;
-
-	// Sample the current sensor
-	stmAdcSample (&adc);
+	chMtxUnlock (&peripheralMutex);
 }

@@ -17,7 +17,7 @@
 // Constants ------------------------------------------------------------------------------------------------------------------
 
 /// @brief The magic string of the EEPROM. Update this value every time the memory map changes to force manual re-programming.
-#define EEPROM_MAP_STRING "BMS_2025_04_18"
+#define EEPROM_MAP_STRING "BMS_2025_05_30"
 
 // Datatypes ------------------------------------------------------------------------------------------------------------------
 
@@ -26,6 +26,9 @@ typedef struct
 	uint8_t pad0 [16];								// 0x0000
 	thermistorPulldownConfig_t thermistorConfig;	// 0x0010
 	dhabS124Config_t currentSensorConfig;			// 0x0030
+	float chargingVoltageLimit;						// 0x0050
+	float chargingCurrentLimit;						// 0x0054
+	float chargingPowerLimit;						// 0x0058
 } eepromMap_t;
 
 // Functions ------------------------------------------------------------------------------------------------------------------

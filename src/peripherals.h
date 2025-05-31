@@ -15,6 +15,7 @@
 #include "peripherals/eeprom_map.h"
 #include "peripherals/ltc6811.h"
 #include "peripherals/mc24lc32.h"
+#include "peripherals/stm_adc.h"
 #include "peripherals/thermistor_pulldown.h"
 
 // Constants ------------------------------------------------------------------------------------------------------------------
@@ -62,6 +63,12 @@ extern bool selfTestFault;
 
 // Global Peripherals ---------------------------------------------------------------------------------------------------------
 
+/// @brief Mutex guarding access to the global peripherals.
+extern mutex_t peripheralMutex;
+
+/// @brief The STM's on-board ADC.
+extern stmAdc_t adc;
+
 /// @brief The BMS's hardware (on-board) EEPROM. This is responsible for storing all non-volatile variables.
 extern mc24lc32_t hardwareEeprom;
 
@@ -96,10 +103,5 @@ bool peripheralsInit (void);
  * @brief Re-initializes the BMS's peripherals after a change has been made to the on-board EEPROM.
  */
 void peripheralsReconfigure (void);
-
-/**
- * @brief Samples the cell voltages, temperatures, and statuses of all the LTCs within the BMS.
- */
-void peripheralsSample (void);
 
 #endif // PERIPHERALS_H

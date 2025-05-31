@@ -28,6 +28,8 @@ CSRC =	$(ALLCSRC)						\
 		src/can/tc_hk_lf_540_14.c		\
 		src/can/transmit.c				\
 										\
+		src/monitor_thread.c			\
+										\
 		src/watchdog.c
 
 # Common library includes

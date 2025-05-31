@@ -16,19 +16,15 @@
 // Includes -------------------------------------------------------------------------------------------------------------------
 
 // Includes
-#include "debug.h"
-#include "peripherals.h"
-#include "watchdog.h"
 #include "can_vehicle.h"
 #include "can_charger.h"
-#include "can/transmit.h"
+#include "debug.h"
+#include "monitor_thread.h"
+#include "peripherals.h"
+#include "watchdog.h"
 
 // ChibiOS
 #include "hal.h"
-
-// Constants ------------------------------------------------------------------------------------------------------------------
-
-#define BMS_THREAD_PERIOD TIME_MS2I (250)
 
 // Interrupts -----------------------------------------------------------------------------------------------------------------
 
@@ -64,115 +60,87 @@ int main (void)
 	// // Start the watchdog timer.
 	// watchdogStart ();
 
-	// TODO(Barach): Move most of this logic into peripherals, or is that too far?
-
 	// If detect line is low, accumulator is on charger. Otherwise, accumulator is in vehicle.
 	if (palReadLine (LINE_CHARGER_DETECT))
 	{
-		// Vehicle mode
-		vehicleEntrypoint ();
+		// Initialize the CAN interface.
+		if (!canVehicleInit (NORMALPRIO))
+		{
+			hardFaultCallback ();
+			while (true);
+		}
+
+		// Start the monitoring thread.
+		monitorThreadStart (NORMALPRIO);
+
+		// Do nothing
+		while (true)
+			chThdSleepMilliseconds (500);
 	}
 	else
 	{
-		// Charger mode
-		chargerEntrypoint ();
-	}
-}
-
-void vehicleEntrypoint (void)
-{
-	// Initialize the CAN interface.
-	if (!canVehicleInit (NORMALPRIO))
-	{
-		hardFaultCallback ();
-		while (true);
-	}
-
-	// Main loop
-	systime_t timePrevious = chVTGetSystemTimeX ();
-	while (true)
-	{
-		// // Reset the watchdog.
-		// watchdogReset ();
-
-		// Sample the LTCs.
-		peripheralsSample ();
-
-		// If a fault is present, open the shutdown loop.
-		bool fltLine = !bmsFault;
-		palWriteLine (LINE_BMS_FLT, fltLine);
-
-		// Transmit the CAN messages.
-		transmitBmsMessages (BMS_THREAD_PERIOD);
-
-		// Sleep until the next loop
-		chThdSleepUntilWindowed (timePrevious, chTimeAddX (timePrevious, BMS_THREAD_PERIOD));
-		timePrevious = chVTGetSystemTimeX ();
-	}
-}
-
-void chargerEntrypoint ()
-{
-	// Initialize the CAN interface.
-	if (!canChargerInit (NORMALPRIO))
-	{
-		hardFaultCallback ();
-		while (true);
-	}
-
-	bool started = false;
-
-	// Main loop
-	systime_t timePrevious = chVTGetSystemTimeX ();
-	while (true)
-	{
-		// // Reset the watchdog.
-		// watchdogReset ();
-
-		// Sample the LTCs.
-		peripheralsSample ();
-
-		// Balance the cells
-		// TODO(Barach): Move to peripherals?
-		// TODO(Barach): Different thread or just different period?
-		// TODO(Barach): Conditional balancing (make config public variable)
-
-		// If a fault is present, open the shutdown loop.
-		bool fltLine = !bmsFault;
-		palWriteLine (LINE_BMS_FLT, fltLine);
-
-		if (!bmsFault)
+		// Initialize the CAN interface.
+		if (!canChargerInit (NORMALPRIO))
 		{
-			float minVoltage = ltcs [0].cellVoltages [0];
-			for (uint16_t ltc = 0; ltc < LTC_COUNT; ++ltc)
-				for (uint16_t cell = 0; cell < LTC6811_CELL_COUNT; ++cell)
-					if (ltcs [ltc].cellVoltages [cell] < minVoltage)
-						minVoltage = ltcs [ltc].cellVoltages [cell];
-
-			for (uint16_t ltc = 0; ltc < LTC_COUNT; ++ltc)
-				for (uint16_t cell = 0; cell < LTC6811_CELL_COUNT; ++cell)
-					ltcs [ltc].cellsDischarging [cell] = ltcs [ltc].cellVoltages [cell] - minVoltage > 0.5f;
-		}
-		else
-		{
-			for (uint16_t ltc = 0; ltc < LTC_COUNT; ++ltc)
-				for (uint16_t cell = 0; cell < LTC6811_CELL_COUNT; ++cell)
-					ltcs [ltc].cellsDischarging [cell] = false;
+			hardFaultCallback ();
+			while (true);
 		}
 
-		ltc6811WriteConfig (ltcBottom);
+		// Start the monitoring thread.
+		monitorThreadStart (NORMALPRIO);
 
-		// if (!started)
-		// 	tcChargerSendCommand (&charger, TC_WORKING_MODE_STARTUP, 100, 0.1, TIME_MS2I (100));
-		// else
-		// 	tcChargerSendCommand (&charger, TC_WORKING_MODE_CLOSING, 100, 0.1, TIME_MS2I (100));
-		// started = true;
+		// Main loop
+		systime_t timePrevious = chVTGetSystemTimeX ();
+		bool balancing = false;
+		while (true)
+		{
+			chMtxLock (&peripheralMutex);
 
-		// Transmit the CAN messages.
-		transmitBmsMessages (BMS_THREAD_PERIOD);
+			if (balancing)
+			{
 
-		// Sleep until the next loop
-		chThdSleepUntilWindowed (timePrevious, chTimeAddX (timePrevious, BMS_THREAD_PERIOD));
-		timePrevious = chVTGetSystemTimeX ();
+				if (!bmsFault)
+				{
+					float minVoltage = ltcs [0].cellVoltages [0];
+					for (uint16_t ltc = 0; ltc < LTC_COUNT; ++ltc)
+						for (uint16_t cell = 0; cell < LTC6811_CELL_COUNT; ++cell)
+							if (ltcs [ltc].cellVoltages [cell] < minVoltage)
+								minVoltage = ltcs [ltc].cellVoltages [cell];
+
+					for (uint16_t ltc = 0; ltc < LTC_COUNT; ++ltc)
+						for (uint16_t cell = 0; cell < LTC6811_CELL_COUNT; ++cell)
+							ltcs [ltc].cellsDischarging [cell] = ltcs [ltc].cellVoltages [cell] - minVoltage > 0.5f;
+				}
+				else
+				{
+					for (uint16_t ltc = 0; ltc < LTC_COUNT; ++ltc)
+						for (uint16_t cell = 0; cell < LTC6811_CELL_COUNT; ++cell)
+							ltcs [ltc].cellsDischarging [cell] = false;
+				}
+			}
+			else
+			{
+				// Calculate the maximum requestable current, based on the power limit.
+				float currentLimit = hardwareEepromMap->chargingPowerLimit / packVoltage;
+
+				// TODO(Barach): Power off correctly.
+				if (bmsFault)
+					currentLimit = 0;
+
+				// Saturate based on the current limit.
+				if (currentLimit > hardwareEepromMap->chargingCurrentLimit)
+					currentLimit = hardwareEepromMap->chargingCurrentLimit;
+
+				// Send the power request.
+				tcChargerSendCommand (&charger, TC_WORKING_MODE_CLOSING,
+					hardwareEepromMap->chargingVoltageLimit, currentLimit, TIME_MS2I (100));
+			}
+
+			chMtxUnlock (&peripheralMutex);
+
+			// Sleep until the next loop
+			chThdSleepUntilWindowed (timePrevious, chTimeAddX (timePrevious, TIME_MS2I (500)));
+			timePrevious = chVTGetSystemTimeX ();
+		}
 	}
 }

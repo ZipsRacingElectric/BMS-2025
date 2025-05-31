@@ -13,6 +13,14 @@
 // Includes
 #include "can/can_node.h"
 
+// Constants ------------------------------------------------------------------------------------------------------------------
+
+/// @brief The maximum requestable voltage limit, in volts.
+#define TC_CHARGER_VOLTAGE_LIMIT_MAX 680
+
+/// @brief The maximum requestable current limit, in amps.
+#define TC_CHARGER_CURRENT_LIMIT_MAX 14
+
 // Datatypes ------------------------------------------------------------------------------------------------------------------
 
 typedef enum

@@ -384,7 +384,7 @@ bool ltc6811SampleCellVoltageSum (ltc6811_t* bottom)
 	// 	device->cellVoltageSum = STAR0_1_SC (device->rx [0], device->rx [1]);
 
 	// stop (bottom);
-	// return true;
+	return true;
 }
 
 bool ltc6811SampleCellVoltageFaults (ltc6811_t* bottom)

@@ -15,6 +15,8 @@ bool overtemperatureFault = true;
 bool senseLineFault = true;
 bool isospiFault = true;
 bool selfTestFault = true;
+bool charging = false;
+bool balancing = false;
 
 // Global Peripherals ---------------------------------------------------------------------------------------------------------
 

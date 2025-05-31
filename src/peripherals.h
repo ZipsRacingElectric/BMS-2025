@@ -61,6 +61,12 @@ extern bool isospiFault;
 /// @brief Indicates an LTC self-test fault is present.
 extern bool selfTestFault;
 
+/// @brief Indicates the BMS is in charging mode and the charger is powered.
+extern bool charging;
+
+/// @brief Indicates the BMS is balancing cell voltages.
+extern bool balancing;
+
 // Global Peripherals ---------------------------------------------------------------------------------------------------------
 
 /// @brief Mutex guarding access to the global peripherals.

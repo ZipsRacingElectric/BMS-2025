@@ -6,7 +6,6 @@
 // Description: Entrypoint and interrupt handlers for the vehicle's battery management system.
 //
 // TODO(Barach):
-// - Fix sum of cells measurement
 // - Introduce sense-board object for abstracting thermistor and LTC mapping.
 // - Replace LTC init with sequence of 'append' functions to remove unnecessary arrays.
 // - Have sense-board take over fault tolerance of LTCs
@@ -91,41 +90,37 @@ int main (void)
 
 		// Main loop
 		systime_t timePrevious = chVTGetSystemTimeX ();
-		bool balancing = false;
 		while (true)
 		{
 			chMtxLock (&peripheralMutex);
 
-			if (balancing)
+			balancing = hardwareEepromMap->balancingEnabled;
+			if (palReadLine (LINE_SHUTDOWN_STATUS) && !bmsFault && balancing)
 			{
+				// TODO(Barach): Proper fault handling
+				float minVoltage = ltcs [0].cellVoltages [0];
+				for (uint16_t ltc = 0; ltc < LTC_COUNT; ++ltc)
+					for (uint16_t cell = 0; cell < LTC6811_CELL_COUNT; ++cell)
+						if (ltcs [ltc].cellVoltages [cell] < minVoltage)
+							minVoltage = ltcs [ltc].cellVoltages [cell];
 
-				if (!bmsFault)
-				{
-					float minVoltage = ltcs [0].cellVoltages [0];
-					for (uint16_t ltc = 0; ltc < LTC_COUNT; ++ltc)
-						for (uint16_t cell = 0; cell < LTC6811_CELL_COUNT; ++cell)
-							if (ltcs [ltc].cellVoltages [cell] < minVoltage)
-								minVoltage = ltcs [ltc].cellVoltages [cell];
-
-					for (uint16_t ltc = 0; ltc < LTC_COUNT; ++ltc)
-						for (uint16_t cell = 0; cell < LTC6811_CELL_COUNT; ++cell)
-							ltcs [ltc].cellsDischarging [cell] = ltcs [ltc].cellVoltages [cell] - minVoltage > 0.5f;
-				}
-				else
-				{
-					for (uint16_t ltc = 0; ltc < LTC_COUNT; ++ltc)
-						for (uint16_t cell = 0; cell < LTC6811_CELL_COUNT; ++cell)
-							ltcs [ltc].cellsDischarging [cell] = false;
-				}
+				for (uint16_t ltc = 0; ltc < LTC_COUNT; ++ltc)
+					for (uint16_t cell = 0; cell < LTC6811_CELL_COUNT; ++cell)
+						ltcs [ltc].cellsDischarging [cell] =
+							ltcs [ltc].cellVoltages [cell] - minVoltage > hardwareEepromMap->balancingThreshold;
 			}
 			else
 			{
+				for (uint16_t ltc = 0; ltc < LTC_COUNT; ++ltc)
+					for (uint16_t cell = 0; cell < LTC6811_CELL_COUNT; ++cell)
+						ltcs [ltc].cellsDischarging [cell] = false;
+			}
+
+			charging = hardwareEepromMap->chargingEnabled;
+			if (palReadLine (LINE_SHUTDOWN_STATUS) && !bmsFault && charging)
+			{
 				// Calculate the maximum requestable current, based on the power limit.
 				float currentLimit = hardwareEepromMap->chargingPowerLimit / packVoltage;
-
-				// TODO(Barach): Power off correctly.
-				if (bmsFault)
-					currentLimit = 0;
 
 				// Saturate based on the current limit.
 				if (currentLimit > hardwareEepromMap->chargingCurrentLimit)
@@ -134,6 +129,11 @@ int main (void)
 				// Send the power request.
 				tcChargerSendCommand (&charger, TC_WORKING_MODE_CLOSING,
 					hardwareEepromMap->chargingVoltageLimit, currentLimit, TIME_MS2I (100));
+			}
+			else
+			{
+				// Disable the charger
+				tcChargerSendCommand (&charger, TC_WORKING_MODE_SLEEP, 0, 0, TIME_MS2I (100));
 			}
 
 			chMtxUnlock (&peripheralMutex);

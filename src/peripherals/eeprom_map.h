@@ -29,6 +29,10 @@ typedef struct
 	float chargingVoltageLimit;						// 0x0050
 	float chargingCurrentLimit;						// 0x0054
 	float chargingPowerLimit;						// 0x0058
+	float chargingThreshold;						// 0x005C
+	bool balancingEnabled;							// 0x0060
+	bool chargingEnabled;							// 0x0061
+	float balancingThreshold;						// 0x0064
 } eepromMap_t;
 
 // Functions ------------------------------------------------------------------------------------------------------------------

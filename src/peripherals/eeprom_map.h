@@ -17,7 +17,7 @@
 // Constants ------------------------------------------------------------------------------------------------------------------
 
 /// @brief The magic string of the EEPROM. Update this value every time the memory map changes to force manual re-programming.
-#define EEPROM_MAP_STRING "BMS_2025_05_30"
+#define EEPROM_MAP_STRING "BMS_2025_06_01"
 
 // Datatypes ------------------------------------------------------------------------------------------------------------------
 
@@ -33,6 +33,7 @@ typedef struct
 	bool balancingEnabled;							// 0x0060
 	bool chargingEnabled;							// 0x0061
 	float balancingThreshold;						// 0x0064
+	float ltcTemperatureMax;						// 0x0068
 } eepromMap_t;
 
 // Functions ------------------------------------------------------------------------------------------------------------------

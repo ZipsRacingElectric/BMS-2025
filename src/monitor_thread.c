@@ -4,6 +4,7 @@
 // Includes
 #include "peripherals.h"
 #include "can/transmit.h"
+#include "watchdog.h"
 
 // Constants ------------------------------------------------------------------------------------------------------------------
 
@@ -19,15 +20,15 @@ void monitorThread (void* arg)
 	systime_t timePrevious = chVTGetSystemTimeX ();
 	while (true)
 	{
-		// // Reset the watchdog.
-		// watchdogReset ();
+		// Reset the watchdog.
+		watchdogReset ();
 
 		chMtxLock (&peripheralMutex);
 
 		// Sample the LTCs
 		ltc6811ClearState (ltcBottom);
 		ltc6811SampleCells (ltcBottom);
-		ltc6811SampleCellVoltageSum (ltcBottom);
+		ltc6811SampleStatus (ltcBottom);
 		ltc6811SampleCellVoltageFaults (ltcBottom);
 		ltc6811SampleGpio (ltcBottom);
 
@@ -54,8 +55,12 @@ void monitorThread (void* arg)
 
 		overtemperatureFault = false;
 		for (uint16_t ltcIndex = 0; ltcIndex < LTC_COUNT; ++ltcIndex)
+		{
 			for (uint16_t thermistorIndex = 0; thermistorIndex < LTC6811_GPIO_COUNT; ++thermistorIndex)
 				overtemperatureFault |= thermistors [ltcIndex][thermistorIndex].overtemperatureFault;
+
+			overvoltageFault |= ltcs [ltcIndex].dieTemperature > hardwareEepromMap->ltcTemperatureMax;
+		}
 
 		bmsFault = undervoltageFault || overvoltageFault || isospiFault || senseLineFault || selfTestFault
 			|| undertemperatureFault || overtemperatureFault;

@@ -7,10 +7,15 @@
 #define CELL_VOLTAGE_INVERSE_FACTOR			(1024.0f / 8.0f)
 #define CELL_VOLTAGE_TO_WORD(voltage)		(uint16_t) ((voltage) * CELL_VOLTAGE_INVERSE_FACTOR)
 
-// Temperature Values (C)
-#define TEMPERATURE_INVERSE_FACTOR			(4096.0f / 256.0f)
-#define TEMPERATURE_OFFSET					-106.0f
-#define TEMPERATURE_TO_WORD(temperature)	(uint16_t) ((temperature - TEMPERATURE_OFFSET) * TEMPERATURE_INVERSE_FACTOR)
+// Cell Temperature Values (C)
+#define CELL_TEMP_INVERSE_FACTOR			(4096.0f / 256.0f)
+#define CELL_TEMP_OFFSET					-106.0f
+#define CELL_TEMP_TO_WORD(temperature)		(uint16_t) ((temperature - CELL_TEMP_OFFSET) * CELL_TEMP_INVERSE_FACTOR)
+
+// LTC Temperature Values (C)
+#define LTC_TEMP_INVERSE_FACTOR				(1024.0f / 128.0f)
+#define LTC_TEMP_OFFSET 					-28.0f
+#define LTC_TEMP_TO_WORD(temperature)		(uint16_t) ((temperature - LTC_TEMP_OFFSET) * LTC_TEMP_INVERSE_FACTOR)
 
 // Pack Voltage (V)
 #define PACK_VOLTAGE_INVERSE_FACTOR			(65536.0f / 819.2f)
@@ -28,6 +33,7 @@
 #define SENSE_LINE_STATUS_BASE_ID			0x724
 #define POWER_MESSAGE_ID					0x728
 #define BALANCING_MESSAGE_BASE_ID			0x729
+#define LTC_TEMPERATURE_MESSAGE_BASE_ID		0x754
 
 // Functions ------------------------------------------------------------------------------------------------------------------
 
@@ -75,6 +81,14 @@ void transmitBmsMessages (sysinterval_t timeout)
 	}
 
 	transmitPowerMessage (&CAND1, timeout);
+
+	// LTC temperature messages
+	for (uint16_t index = 0; index < LTC_TEMPERATURE_MESSAGE_COUNT; ++index)
+	{
+		timeCurrent = chVTGetSystemTimeX ();
+		timeout = chTimeDiffX (timeCurrent, timeDeadline);
+		transmitLtcTemperatureMessage (&CAND1, timeout, index);
+	}
 }
 
 msg_t transmitStatusMessage (CANDriver* driver, sysinterval_t timeout)
@@ -173,7 +187,8 @@ msg_t transmitTemperatureMessage (CANDriver* driver, sysinterval_t timeout, uint
 
 	for (uint8_t tempIndex = 0; tempIndex < 5; ++tempIndex)
 	{
-		temperatures [tempIndex] = TEMPERATURE_TO_WORD (thermistors [index][tempIndex].temperature);
+		// TODO(Barach): Temperature reading under/overflow
+		temperatures [tempIndex] = CELL_TEMP_TO_WORD (thermistors [index][tempIndex].temperature);
 		undertemperature |= thermistors [index][tempIndex].undertemperatureFault;
 		overtemperature |= thermistors [index][tempIndex].overtemperatureFault;
 	}
@@ -253,6 +268,39 @@ msg_t transmitBalancingMessage (CANDriver* driver, sysinterval_t timeout, uint16
 	if (LTC_COUNT > ltcIndex + 3)
 		for (uint8_t bit = 0; bit < LTC6811_CELL_COUNT; ++bit)
 			frame.data16 [3] |= ltcs [index + 3].cellsDischarging [bit] << bit;
+
+	return canTransmitTimeout (driver, CAN_ANY_MAILBOX, &frame, timeout);
+}
+
+msg_t transmitLtcTemperatureMessage (CANDriver* driver, sysinterval_t timeout, uint16_t index)
+{
+	uint16_t temperatures [6] = {};
+	uint16_t ltcBase = index * 6;
+	for (uint16_t ltcOffset = 0; ltcOffset < 6; ++ltcOffset)
+	{
+		if (ltcOffset + ltcBase >= LTC_COUNT)
+			break;
+
+		temperatures [ltcOffset] = LTC_TEMP_TO_WORD (ltcs [ltcBase + ltcOffset].dieTemperature);
+	}
+
+	CANTxFrame frame =
+	{
+		.DLC	= 8,
+		.IDE	= CAN_IDE_STD,
+		.SID	= LTC_TEMPERATURE_MESSAGE_BASE_ID + index,
+		.data8	=
+		{
+			temperatures [0],
+			(temperatures [1] << 2) | ((temperatures [0] >> 8) & 0b11),
+			(temperatures [2] << 4) | ((temperatures [1] >> 6) & 0b1111),
+			(temperatures [3] << 6) | ((temperatures [2] >> 4) & 0b111111),
+			temperatures [3] >> 2,
+			temperatures [4],
+			(temperatures [5] << 2) | ((temperatures [4] >> 8) & 0b11),
+			(temperatures [5] >> 6) & 0b1111
+		}
+	};
 
 	return canTransmitTimeout (driver, CAN_ANY_MAILBOX, &frame, timeout);
 }

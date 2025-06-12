@@ -19,6 +19,7 @@
 #define TEMPERATURE_MESSAGE_COUNT ((TEMP_COUNT + 4) / 5)
 #define SENSE_LINE_STATUS_MESSAGE_COUNT ((WIRE_COUNT + 51) / 52)
 #define BALANCING_MESSAGE_COUNT ((CELL_COUNT + 47) / 48)
+#define LTC_TEMPERATURE_MESSAGE_COUNT ((LTC_COUNT + 7) / 8)
 
 // Functions ------------------------------------------------------------------------------------------------------------------
 
@@ -79,5 +80,14 @@ msg_t transmitSenseLineStatusMessage (CANDriver* driver, sysinterval_t timeout, 
  * @return The result of the CAN operation.
  */
 msg_t transmitBalancingMessage (CANDriver* driver, sysinterval_t timeout, uint16_t index);
+
+/**
+ * @brief Transmits an LTC temperature message.
+ * @param driver The CAN driver to use.
+ * @param timeout The interval to timeout after.
+ * @param index The index of the message to send.
+ * @return The result of the CAN operation.
+ */
+msg_t transmitLtcTemperatureMessage (CANDriver* driver, sysinterval_t timeout, uint16_t index);
 
 #endif // TRANSMIT_H

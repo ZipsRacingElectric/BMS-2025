@@ -130,8 +130,8 @@ msg_t tcChargerSendCommand (tcCharger_t* charger, tcWorkingMode_t mode, float vo
 		}
 	};
 
-	transmit.data8 [5] = mode; // Working mode
-	transmit.data8 [6] = 0x00; // Operating mode is set to charging mode only, no heating.
+	transmit.data8 [4] = mode; // Working mode
+	transmit.data8 [5] = 0x00; // Operating mode is set to charging mode only, no heating.
 
 	return canTransmitTimeout (charger->driver, CAN_ANY_MAILBOX, &transmit, timeout);
 }

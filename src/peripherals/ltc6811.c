@@ -37,6 +37,8 @@
 
 #define COMMAND_PLADC					0b11100010100
 
+#define COMMAND_ADSTAT(md, chst)		(0b10001101000 | ((md) << 7) | (chst))
+
 #define VUV(vuv)						((uint16_t) (vuv * 625.0f) - 1)
 #define VOV(vov)						((uint16_t) (vov * 625.0f))
 
@@ -53,6 +55,7 @@
 	((uint8_t) (((dcto) << 4) | ((dcc12) << 3) | ((dcc11) << 2) | ((dcc10) << 1) | (dcc9)))
 
 #define STAR0_1_SC(star0, star1)		(((uint16_t) (((star1) << 8) | (star0))) * 0.002f)
+#define STAR2_3_ITMP(star2, star3)		(((uint16_t) (((star3) << 8) | (star2))) * 0.1f / 7.5f - 273.0f)
 
 #define STBR2_C1UV(stbr2)				((stbr2 & 0b00000001) == 0b00000001)
 #define STBR2_C1OV(stbr2)				((stbr2 & 0b00000010) == 0b00000010)
@@ -133,6 +136,15 @@ static const systime_t ADC_MODE_TIMEOUTS [] =
 	TIME_US2I (1113),	// For 27 kHz mode
 	TIME_US2I (2335),	// For 7 kHz mode
 	TIME_MS2I (202)		// For 26 Hz mode
+};
+
+/// @brief The total conversion time of the status register ADC measuring all values. Indexed by @c ltc6811AdcMode_t .
+static const systime_t STATUS_ADC_MODE_TIMEOUTS [] =
+{
+	TIME_US2I (8537),	// For 422 Hz mode
+	TIME_US2I (748),	// For 27 kHz mode
+	TIME_US2I (1563),	// For 7 kHz mode
+	TIME_MS2I (135),	// For 26 Hz mode
 };
 
 typedef enum
@@ -359,31 +371,44 @@ bool ltc6811SampleCells (ltc6811_t* bottom)
 	return true;
 }
 
-bool ltc6811SampleCellVoltageSum (ltc6811_t* bottom)
+bool ltc6811SampleStatus (ltc6811_t* bottom)
 {
-	// TODO(Barach): This should actually sample
-	for (ltc6811_t* device = bottom; device != NULL; device = device->upperDevice)
+	start (bottom);
+	wakeupSleep (bottom);
+
+	// Start the ADC measurement for all values.
+	if (!writeCommand (bottom, COMMAND_ADSTAT (bottom->config->statusAdcMode, 0b000)))
 	{
-		device->cellVoltageSum = 0.0f;
-		for (uint16_t index = 0; index < LTC6811_CELL_COUNT; ++index)
-			device->cellVoltageSum += device->cellVoltages [index];
+		stop (bottom);
+		failGpio (bottom);
+		return false;
 	}
 
-	// start (bottom);
-	// wakeupSleep (bottom);
+	// Block until the ADC conversion is complete
+	if (!pollAdc (bottom, STATUS_ADC_MODE_TIMEOUTS [bottom->config->statusAdcMode]))
+	{
+		stop (bottom);
+		failGpio (bottom);
+		return false;
+	}
 
-	// // Read the status register group A.
-	// if (!readRegisterGroups (bottom, COMMAND_RDSTATA))
-	// {
-	// 	stop (bottom);
-	// 	return false;
-	// }
+	// Read the status register group A.
+	if (!readRegisterGroups (bottom, COMMAND_RDSTATA))
+	{
+		stop (bottom);
+		return false;
+	}
 
-	// // Read the sum of cell voltages.
-	// for (ltc6811_t* device = bottom; device != NULL; device = device->upperDevice)
-	// 	device->cellVoltageSum = STAR0_1_SC (device->rx [0], device->rx [1]);
+	for (ltc6811_t* device = bottom; device != NULL; device = device->upperDevice)
+	{
+		// Read the sum of cell voltages.
+		device->cellVoltageSum = STAR0_1_SC (device->rx [0], device->rx [1]);
 
-	// stop (bottom);
+		// Read the die temperature.
+		device->dieTemperature = STAR2_3_ITMP (device->rx [2], device->rx [3]);
+	}
+
+	stop (bottom);
 	return true;
 }
 

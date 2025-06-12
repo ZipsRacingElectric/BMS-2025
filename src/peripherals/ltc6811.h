@@ -98,6 +98,9 @@ typedef struct
 	/// @brief The ADC conversion mode to use for measuring the GPIO voltages.
 	ltc6811AdcMode_t gpioAdcMode;
 
+	/// @brief The ADC conversion mode to use for measuring the status values.
+	ltc6811AdcMode_t statusAdcMode;
+
 	/// @brief Indicates whether or not dischaging cell should be permitted.
 	bool dischargeAllowed;
 
@@ -146,6 +149,7 @@ struct ltc6811
 	float cellVoltagesPullup [LTC6811_CELL_COUNT];
 	float cellVoltagesPulldown [LTC6811_CELL_COUNT];
 	float cellVoltagesDelta [LTC6811_CELL_COUNT];
+	float dieTemperature;
 	uint16_t vref2;
 
 	// Discharging
@@ -196,13 +200,12 @@ bool ltc6811WriteConfig (ltc6811_t* bottom);
 bool ltc6811SampleCells (ltc6811_t* bottom);
 
 /**
- * @brief Computers the sum of cell voltages for all devices in a daisy chain.
- * @note This can only be done after a call to @c ltc6811SampleCells
+ * @brief Samples the die temperature and sum of cells measurements.
  * @param bottom The bottom (first) device in the stack.
  * @return False if a fatal error occurred, true otherwise. A non-fatal return code does not mean all measurements are valid,
  * check individual device states to determine so.
  */
-bool ltc6811SampleCellVoltageSum (ltc6811_t* bottom);
+bool ltc6811SampleStatus (ltc6811_t* bottom);
 
 /**
  * @brief Checks the undervoltage / overvoltage conditions of all devices in a daisy chain.

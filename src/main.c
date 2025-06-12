@@ -21,9 +21,13 @@
 #include "monitor_thread.h"
 #include "peripherals.h"
 #include "watchdog.h"
+#include "algorithm/sort.h"
 
 // ChibiOS
 #include "hal.h"
+
+// C Standard Library
+#include <float.h>
 
 // Interrupts -----------------------------------------------------------------------------------------------------------------
 
@@ -56,9 +60,10 @@ int main (void)
 		while (true);
 	}
 
-	// // Start the watchdog timer.
-	// watchdogStart ();
+	// Start the watchdog timer.
+	watchdogStart ();
 
+	// TODO(Barach): Re-invert
 	// If detect line is low, accumulator is on charger. Otherwise, accumulator is in vehicle.
 	if (palReadLine (LINE_CHARGER_DETECT))
 	{
@@ -94,9 +99,8 @@ int main (void)
 		{
 			chMtxLock (&peripheralMutex);
 
-			// TODO(Barach): Change to prechargeComplete
 			balancing = hardwareEepromMap->balancingEnabled;
-			if (shutdownLoopClosed && !bmsFault && balancing)
+			if (prechargeComplete && !bmsFault && balancing)
 			{
 				// TODO(Barach): Proper fault handling
 				float minVoltage = ltcs [0].cellVoltages [0];
@@ -105,10 +109,25 @@ int main (void)
 						if (ltcs [ltc].cellVoltages [cell] < minVoltage)
 							minVoltage = ltcs [ltc].cellVoltages [cell];
 
+				uint8_t balanceCount = 4;
+				float sortedVoltages [LTC6811_CELL_COUNT];
+				uint8_t sortedIndices [LTC6811_CELL_COUNT];
 				for (uint16_t ltc = 0; ltc < LTC_COUNT; ++ltc)
+				{
+					sortValues (ltcs [ltc].cellVoltages, LTC6811_CELL_COUNT, sortedVoltages, sortedIndices, balanceCount, >, FLT_MIN);
+
 					for (uint16_t cell = 0; cell < LTC6811_CELL_COUNT; ++cell)
-						ltcs [ltc].cellsDischarging [cell] =
-							ltcs [ltc].cellVoltages [cell] - minVoltage > hardwareEepromMap->balancingThreshold;
+						ltcs [ltc].cellsDischarging [cell] = false;
+
+					for (uint16_t cell = 0; cell < balanceCount; ++cell)
+						ltcs [ltc].cellsDischarging [sortedIndices [cell]] =
+							ltcs [ltc].cellVoltages [sortedIndices [cell]] - minVoltage > hardwareEepromMap->balancingThreshold;
+				}
+
+				// for (uint16_t ltc = 0; ltc < LTC_COUNT; ++ltc)
+				// 	for (uint16_t cell = 0; cell < LTC6811_CELL_COUNT; ++cell)
+				// 		ltcs [ltc].cellsDischarging [cell] =
+				// 			ltcs [ltc].cellVoltages [cell] - minVoltage > hardwareEepromMap->balancingThreshold;
 			}
 			else
 			{
@@ -117,9 +136,8 @@ int main (void)
 						ltcs [ltc].cellsDischarging [cell] = false;
 			}
 
-			// TODO(Barach): Change to prechargeComplete
 			charging = hardwareEepromMap->chargingEnabled;
-			if (shutdownLoopClosed && !bmsFault && charging)
+			if (prechargeComplete && !bmsFault && charging)
 			{
 				// Calculate the maximum requestable current, based on the power limit.
 				float currentLimit = hardwareEepromMap->chargingPowerLimit / packVoltage;
@@ -129,7 +147,7 @@ int main (void)
 					currentLimit = hardwareEepromMap->chargingCurrentLimit;
 
 				// Send the power request.
-				tcChargerSendCommand (&charger, TC_WORKING_MODE_CLOSING,
+				tcChargerSendCommand (&charger, TC_WORKING_MODE_STARTUP,
 					hardwareEepromMap->chargingVoltageLimit, currentLimit, TIME_MS2I (100));
 			}
 			else

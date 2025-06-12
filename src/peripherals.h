@@ -21,7 +21,7 @@
 // Constants ------------------------------------------------------------------------------------------------------------------
 
 /// @brief The number of LTC BMS ICs in the daisy chain. Note this must be even.
-#define LTC_COUNT 2
+#define LTC_COUNT 12
 
 /// @brief The number of cells in the accumulator.
 #define CELL_COUNT (LTC_COUNT * LTC6811_CELL_COUNT)

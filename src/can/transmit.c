@@ -110,7 +110,10 @@ msg_t transmitStatusMessage (CANDriver* driver, sysinterval_t timeout)
 			(charging << 7),
 			balancing |
 			(shutdownLoopClosed << 1) |
-			(prechargeComplete << 2)
+			(prechargeComplete << 2) |
+			(shutdownLoopBlip << 3) |
+			(bmsFaultRelay << 4) |
+			(imdFaultRelay << 5)
 		}
 	};
 

@@ -19,6 +19,10 @@ bool charging = false;
 bool balancing = false;
 bool shutdownLoopClosed = false;
 bool prechargeComplete = false;
+bool shutdownLoopBlip = false;
+systime_t shutdownLoopBlipTime = 0;
+bool bmsFaultRelay = true;
+bool imdFaultRelay = true;
 
 // Global Peripherals ---------------------------------------------------------------------------------------------------------
 
@@ -228,6 +232,20 @@ static ltc6811_t* const DAISY_CHAIN [] =
 	&ltcs [10]
 };
 
+// Callbacks ------------------------------------------------------------------------------------------------------------------
+
+void onShutdownLoopOpen (void* arg)
+{
+	(void) arg;
+
+	// If the shutdown loop was previously closed, record the blip.
+	if (shutdownLoopClosed)
+	{
+		shutdownLoopBlip = true;
+		shutdownLoopBlipTime = chVTGetSystemTimeX ();
+	}
+}
+
 // Functions ------------------------------------------------------------------------------------------------------------------
 
 bool peripheralsInit (void)
@@ -260,6 +278,10 @@ bool peripheralsInit (void)
 	// LTC daisy chain initialization
 	ltc6811Init (DAISY_CHAIN, LTC_COUNT, &DAISY_CHAIN_CONFIG);
 	ltcBottom = DAISY_CHAIN [0];
+
+	// Set the on shutdown loop open callback
+	palEnableLineEvent (LINE_SHUTDOWN_STATUS, PAL_EVENT_MODE_RISING_EDGE);
+	palSetLineCallback (LINE_SHUTDOWN_STATUS, onShutdownLoopOpen, NULL);
 
 	return true;
 }

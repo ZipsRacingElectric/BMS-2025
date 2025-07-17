@@ -67,6 +67,8 @@ void monitorThread (void* arg)
 
 		shutdownLoopClosed = !palReadLine (LINE_SHUTDOWN_STATUS);
 		prechargeComplete = !palReadLine (LINE_PRECHARGE_STATUS);
+		bmsFaultRelay = !palReadLine (LINE_BMS_FLTDD);
+		imdFaultRelay = !palReadLine (LINE_IMD_FLT);
 
 		// Sample the current sensor
 		stmAdcSample (&adc);
@@ -79,6 +81,10 @@ void monitorThread (void* arg)
 
 		// Transmit the CAN messages.
 		transmitBmsMessages (BMS_THREAD_PERIOD);
+
+		// Reset the blip status
+		if (shutdownLoopBlip && chTimeDiffX (shutdownLoopBlipTime, chVTGetSystemTimeX ()) < TIME_MS2I (1000))
+			shutdownLoopBlip = false;
 
 		// Sleep until the next loop
 		chThdSleepUntilWindowed (timePrevious, chTimeAddX (timePrevious, BMS_THREAD_PERIOD));

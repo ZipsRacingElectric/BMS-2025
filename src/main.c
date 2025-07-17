@@ -61,7 +61,7 @@ int main (void)
 	}
 
 	// Start the watchdog timer.
-	watchdogStart ();
+	// watchdogStart ();
 
 	// TODO(Barach): Re-invert
 	// If detect line is low, accumulator is on charger. Otherwise, accumulator is in vehicle.

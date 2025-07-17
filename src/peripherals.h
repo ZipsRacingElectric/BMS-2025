@@ -73,6 +73,17 @@ extern bool shutdownLoopClosed;
 /// @brief Indicates the shutdown loop is closed and precharge is complete.
 extern bool prechargeComplete;
 
+/// @brief Indicates the shutdown loop opened briefly when it was previously read to be closed.
+extern bool shutdownLoopBlip;
+extern systime_t shutdownLoopBlipTime;
+
+/// @brief Indicates the status of the BMS fault relay. This is a latched version of @c bmsFault . True means the relay is open
+/// (faulted), false means closed (okay).
+extern bool bmsFaultRelay;
+
+/// @brief Indicates the status of the IMD fault relay. True means the relay is open (faulted), false means closed (okay).
+extern bool imdFaultRelay;
+
 // Global Peripherals ---------------------------------------------------------------------------------------------------------
 
 /// @brief Mutex guarding access to the global peripherals.

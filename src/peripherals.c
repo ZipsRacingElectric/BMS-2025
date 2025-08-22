@@ -2,7 +2,7 @@
 #include "peripherals.h"
 
 // Includes
-#include "peripherals/stm_adc.h"
+#include "peripherals/adc/stm_adc.h"
 
 // TODO(Barach): This is pretty messy, whole lot of hard-coded values and copy-paste code.
 

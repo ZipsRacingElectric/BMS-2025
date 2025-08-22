@@ -11,8 +11,8 @@
 // Includes -------------------------------------------------------------------------------------------------------------------
 
 // Includes
-#include "peripherals/dhab_s124.h"
-#include "peripherals/thermistor_pulldown.h"
+#include "peripherals/adc/dhab_s124.h"
+#include "peripherals/adc/thermistor_pulldown.h"
 
 // Constants ------------------------------------------------------------------------------------------------------------------
 

@@ -29,12 +29,13 @@ static const CANConfig CAN1_CONFIG =
 
 static const canThreadConfig_t CAN1_RX_THREAD_CONFIG =
 {
-	.name		= "can_1_rx",
-	.driver		= &CAND1,
-	.period		= TIME_MS2I (10),
-	.nodes		= NULL,
-	.nodeCount	= 0,
-	.rxHandler	= &receiveBmsMessage
+	.name			= "can1_rx",
+	.driver			= &CAND1,
+	.period			= TIME_MS2I (10),
+	.nodes			= NULL,
+	.nodeCount		= 0,
+	.rxHandler		= &receiveBmsMessage,
+	.bridgeDriver	= NULL
 };
 
 // Functions ------------------------------------------------------------------------------------------------------------------

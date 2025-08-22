@@ -8,6 +8,7 @@
 
 // Constants ------------------------------------------------------------------------------------------------------------------
 
+// TODO(Barach): Validate this is being achieved.
 #define BMS_THREAD_PERIOD TIME_MS2I (250)
 
 // Threads --------------------------------------------------------------------------------------------------------------------
@@ -59,7 +60,7 @@ void monitorThread (void* arg)
 			for (uint16_t thermistorIndex = 0; thermistorIndex < LTC6811_GPIO_COUNT; ++thermistorIndex)
 				overtemperatureFault |= thermistors [ltcIndex][thermistorIndex].overtemperatureFault;
 
-			overvoltageFault |= ltcs [ltcIndex].dieTemperature > hardwareEepromMap->ltcTemperatureMax;
+			overvoltageFault |= ltcs [ltcIndex].dieTemperature > physicalEepromMap->ltcTemperatureMax;
 		}
 
 		bmsFault = undervoltageFault || overvoltageFault || isospiFault || senseLineFault || selfTestFault

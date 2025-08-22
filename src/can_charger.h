@@ -7,7 +7,7 @@
 // Date Created: 2025.04.16
 //
 // Description: CAN interface for when the accumulator is on the charger. This bus runs at 500 kbps as opposed to the vehicle
-//   at 1 Mbps.
+//   bus at which runs at 1 Mbps.
 
 // Includes -------------------------------------------------------------------------------------------------------------------
 

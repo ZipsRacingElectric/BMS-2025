@@ -6,11 +6,12 @@
 // Description: Entrypoint and interrupt handlers for the vehicle's battery management system.
 //
 // TODO(Barach):
+// - Balancing + sense line test doesn't work. This is on a stricter timeline.
 // - Introduce sense-board object for abstracting thermistor and LTC mapping.
 // - Replace LTC init with sequence of 'append' functions to remove unnecessary arrays.
 // - Have sense-board take over fault tolerance of LTCs
 // - Have LTCs dump cell values into user-provided array so single array can be used.
-// - Fix ADC polling
+// - Fix ADC polling.
 
 // Includes -------------------------------------------------------------------------------------------------------------------
 
@@ -99,7 +100,7 @@ int main (void)
 		{
 			chMtxLock (&peripheralMutex);
 
-			balancing = hardwareEepromMap->balancingEnabled;
+			balancing = physicalEepromMap->balancingEnabled;
 			if (prechargeComplete && !bmsFault && balancing)
 			{
 				// TODO(Barach): Proper fault handling
@@ -121,13 +122,13 @@ int main (void)
 
 					for (uint16_t cell = 0; cell < balanceCount; ++cell)
 						ltcs [ltc].cellsDischarging [sortedIndices [cell]] =
-							ltcs [ltc].cellVoltages [sortedIndices [cell]] - minVoltage > hardwareEepromMap->balancingThreshold;
+							ltcs [ltc].cellVoltages [sortedIndices [cell]] - minVoltage > physicalEepromMap->balancingThreshold;
 				}
 
 				// for (uint16_t ltc = 0; ltc < LTC_COUNT; ++ltc)
 				// 	for (uint16_t cell = 0; cell < LTC6811_CELL_COUNT; ++cell)
 				// 		ltcs [ltc].cellsDischarging [cell] =
-				// 			ltcs [ltc].cellVoltages [cell] - minVoltage > hardwareEepromMap->balancingThreshold;
+				// 			ltcs [ltc].cellVoltages [cell] - minVoltage > physicalEepromMap->balancingThreshold;
 			}
 			else
 			{
@@ -136,19 +137,19 @@ int main (void)
 						ltcs [ltc].cellsDischarging [cell] = false;
 			}
 
-			charging = hardwareEepromMap->chargingEnabled;
+			charging = physicalEepromMap->chargingEnabled;
 			if (prechargeComplete && !bmsFault && charging)
 			{
 				// Calculate the maximum requestable current, based on the power limit.
-				float currentLimit = hardwareEepromMap->chargingPowerLimit / packVoltage;
+				float currentLimit = physicalEepromMap->chargingPowerLimit / packVoltage;
 
 				// Saturate based on the current limit.
-				if (currentLimit > hardwareEepromMap->chargingCurrentLimit)
-					currentLimit = hardwareEepromMap->chargingCurrentLimit;
+				if (currentLimit > physicalEepromMap->chargingCurrentLimit)
+					currentLimit = physicalEepromMap->chargingCurrentLimit;
 
 				// Send the power request.
 				tcChargerSendCommand (&charger, TC_WORKING_MODE_STARTUP,
-					hardwareEepromMap->chargingVoltageLimit, currentLimit, TIME_MS2I (100));
+					physicalEepromMap->chargingVoltageLimit, currentLimit, TIME_MS2I (100));
 			}
 			else
 			{

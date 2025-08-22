@@ -4,6 +4,8 @@
 // Includes
 #include "peripherals/stm_adc.h"
 
+// TODO(Barach): This is pretty messy, whole lot of hard-coded values and copy-paste code.
+
 // Global State ---------------------------------------------------------------------------------------------------------------
 
 float packVoltage = 0.0f;
@@ -29,8 +31,7 @@ bool imdFaultRelay = true;
 // Public
 mutex_t					peripheralMutex;
 stmAdc_t				adc;
-mc24lc32_t				hardwareEeprom;
-eepromMap_t*			hardwareEepromMap;
+mc24lc32_t				physicalEeprom;
 virtualEeprom_t			virtualEeprom;
 ltc6811_t				ltcs [LTC_COUNT];
 ltc6811_t*				ltcBottom;
@@ -67,23 +68,24 @@ static const stmAdcConfig_t ADC_CONFIG =
 	}
 };
 
-/// @brief Configuration for the hardware EEPROM.
-static const mc24lc32Config_t HARDWARE_EEPROM_CONFIG =
+/// @brief Configuration for the on-board EEPROM.
+static const mc24lc32Config_t PHYSICAL_EEPROM_CONFIG =
 {
 	.addr			= 0x50,
 	.i2c			= &I2CD1,
 	.timeout		= TIME_MS2I (500),
-	.magicString	= EEPROM_MAP_STRING
+	.magicString	= EEPROM_MAP_STRING,
+	.dirtyHook		= peripheralsReconfigure
 };
 
-/// @brief Configuration for the BMS's virtual memory.
+/// @brief Configuration for the BMS's virtual EEPROM.
 static const virtualEepromConfig_t VIRTUAL_EEPROM_CONFIG =
 {
 	.count		= 2,
 	.entries	=
 	{
 		{
-			.eeprom	= (eeprom_t*) &hardwareEeprom,
+			.eeprom	= (eeprom_t*) &physicalEeprom,
 			.addr	= 0x0000,
 			.size	= 0x1000,
 		},
@@ -260,10 +262,9 @@ bool peripheralsInit (void)
 	if (i2cStart (&I2CD1, &I2C1_CONFIG) != MSG_OK)
 		return false;
 
-	// Hardware EEPROM initialization
-	if (!mc24lc32Init (&hardwareEeprom, &HARDWARE_EEPROM_CONFIG) && hardwareEeprom.state == MC24LC32_STATE_FAILED)
+	// Physical EEPROM initialization (only exit early if a failure occurred).
+	if (!mc24lc32Init (&physicalEeprom, &PHYSICAL_EEPROM_CONFIG) && physicalEeprom.state == MC24LC32_STATE_FAILED)
 		return false;
-	hardwareEepromMap = (eepromMap_t*) hardwareEeprom.cache;
 
 	// Readonly / Writeonly EEPROM initialization
 	eepromInit (&readonlyWriteonlyEeprom, eepromWriteonlyWrite, eepromReadonlyRead);
@@ -273,7 +274,7 @@ bool peripheralsInit (void)
 
 	// Reconfigurable peripheral initializations. Note this must occur before the LTC initialization as the LTCs are dependent
 	// on the thermistor peripherals.
-	peripheralsReconfigure ();
+	peripheralsReconfigure (NULL);
 
 	// LTC daisy chain initialization
 	ltc6811Init (DAISY_CHAIN, LTC_COUNT, &DAISY_CHAIN_CONFIG);
@@ -286,17 +287,19 @@ bool peripheralsInit (void)
 	return true;
 }
 
-void peripheralsReconfigure (void)
+void peripheralsReconfigure (void* caller)
 {
+	(void) caller;
+
 	chMtxLock (&peripheralMutex);
 
 	// Thermistor initialization
 	for (uint16_t deviceIndex = 0; deviceIndex < LTC_COUNT; ++deviceIndex)
 		for (uint16_t gpioIndex = 0; gpioIndex < LTC6811_GPIO_COUNT; ++gpioIndex)
-			thermistorPulldownInit (&thermistors [deviceIndex][gpioIndex], &hardwareEepromMap->thermistorConfig);
+			thermistorPulldownInit (&thermistors [deviceIndex][gpioIndex], &physicalEepromMap->thermistorConfig);
 
 	// Current sensor initialization
-	dhabS124Init (&currentSensor, &hardwareEepromMap->currentSensorConfig);
+	dhabS124Init (&currentSensor, &physicalEepromMap->currentSensorConfig);
 
 	chMtxUnlock (&peripheralMutex);
 }

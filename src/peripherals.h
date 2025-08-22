@@ -6,7 +6,7 @@
 // Author: Cole Barach
 // Date Created: 2025.02.20
 //
-// Description: Global objects representing the grounded low-voltage hardware of the BMS.
+// Description: Global objects representing the low-voltage hardware of the BMS.
 
 // Includes -------------------------------------------------------------------------------------------------------------------
 
@@ -92,13 +92,13 @@ extern mutex_t peripheralMutex;
 /// @brief The STM's on-board ADC.
 extern stmAdc_t adc;
 
-/// @brief The BMS's hardware (on-board) EEPROM. This is responsible for storing all non-volatile variables.
-extern mc24lc32_t hardwareEeprom;
+/// @brief The BMS's physical (on-board) EEPROM. This is responsible for storing all non-volatile variables.
+extern mc24lc32_t physicalEeprom;
 
-/// @brief Structure mapping the hardware EEPROM's contents to C datatypes.
-extern eepromMap_t* hardwareEepromMap;
+/// @brief Structure mapping the physical EEPROM's contents to C datatypes.
+static eepromMap_t* const physicalEepromMap = (eepromMap_t*) physicalEeprom.cache;
 
-/// @brief The BMS's virtual memory map. This aggregates all non-volatile memory into a single map for CAN-bus access.
+/// @brief The BMS's virtual memory map. This aggregates all externally accessible memory into a single map for CAN-bus access.
 extern virtualEeprom_t virtualEeprom;
 
 /// @brief The BMS's sense-board ICs. Indexed from negative-most potential LTC to positive-most potential LTC.
@@ -124,7 +124,8 @@ bool peripheralsInit (void);
 
 /**
  * @brief Re-initializes the BMS's peripherals after a change has been made to the on-board EEPROM.
+ * @param caller Ignored. Used to make function signature compatible with EEPROM dirty hook.
  */
-void peripheralsReconfigure (void);
+void peripheralsReconfigure (void* caller);
 
 #endif // PERIPHERALS_H

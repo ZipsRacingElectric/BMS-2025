@@ -6,7 +6,7 @@
 // Description: Entrypoint and interrupt handlers for the vehicle's battery management system.
 //
 // TODO(Barach):
-// - Balancing + sense line test doesn't work. This is on a stricter timeline.
+// - Balancing + sense line test doesn't work.
 // - Introduce sense-board object for abstracting thermistor and LTC mapping.
 // - Replace LTC init with sequence of 'append' functions to remove unnecessary arrays.
 // - Have sense-board take over fault tolerance of LTCs
@@ -62,9 +62,8 @@ int main (void)
 	}
 
 	// Start the watchdog timer.
-	// watchdogStart ();
+	watchdogStart ();
 
-	// TODO(Barach): Re-invert
 	// If detect line is low, accumulator is on charger. Otherwise, accumulator is in vehicle.
 	if (palReadLine (LINE_CHARGER_DETECT))
 	{
@@ -103,18 +102,20 @@ int main (void)
 			balancing = physicalEepromMap->balancingEnabled;
 			if (prechargeComplete && !bmsFault && balancing)
 			{
-				// TODO(Barach): Proper fault handling
+				// Search the pack for the min cell voltage
 				float minVoltage = ltcs [0].cellVoltages [0];
 				for (uint16_t ltc = 0; ltc < LTC_COUNT; ++ltc)
 					for (uint16_t cell = 0; cell < LTC6811_CELL_COUNT; ++cell)
 						if (ltcs [ltc].cellVoltages [cell] < minVoltage)
 							minVoltage = ltcs [ltc].cellVoltages [cell];
 
+				// Only balance the highest 4 deltas. This is to compensate for the LTCs overheating.
 				uint8_t balanceCount = 4;
 				float sortedVoltages [LTC6811_CELL_COUNT];
 				uint8_t sortedIndices [LTC6811_CELL_COUNT];
 				for (uint16_t ltc = 0; ltc < LTC_COUNT; ++ltc)
 				{
+					// Cursed sorting algorithm.
 					sortValues (ltcs [ltc].cellVoltages, LTC6811_CELL_COUNT, sortedVoltages, sortedIndices, balanceCount, >, FLT_MIN);
 
 					for (uint16_t cell = 0; cell < LTC6811_CELL_COUNT; ++cell)
@@ -124,11 +125,6 @@ int main (void)
 						ltcs [ltc].cellsDischarging [sortedIndices [cell]] =
 							ltcs [ltc].cellVoltages [sortedIndices [cell]] - minVoltage > physicalEepromMap->balancingThreshold;
 				}
-
-				// for (uint16_t ltc = 0; ltc < LTC_COUNT; ++ltc)
-				// 	for (uint16_t cell = 0; cell < LTC6811_CELL_COUNT; ++cell)
-				// 		ltcs [ltc].cellsDischarging [cell] =
-				// 			ltcs [ltc].cellVoltages [cell] - minVoltage > physicalEepromMap->balancingThreshold;
 			}
 			else
 			{
